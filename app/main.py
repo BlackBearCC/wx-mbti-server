@@ -13,6 +13,7 @@ from starlette.middleware.sessions import SessionMiddleware
 import structlog
 import time
 import os
+import logging
 
 from app.config.settings import get_settings
 from app.config.database import init_db, close_db
@@ -29,11 +30,11 @@ structlog.configure(
     processors=[
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.add_log_level,
-        structlog.processors.JSONRenderer() if settings.LOG_FORMAT == "json"
+        structlog.processors.JSONRenderer(ensure_ascii=False) if settings.LOG_FORMAT == "json"
         else structlog.processors.ConsoleRenderer(),
     ],
     wrapper_class=structlog.make_filtering_bound_logger(
-        getattr(structlog, settings.LOG_LEVEL.upper(), structlog.INFO)
+        getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
     ),
     logger_factory=structlog.PrintLoggerFactory(),
     context_class=dict,
@@ -46,47 +47,71 @@ logger = structlog.get_logger()
 websocket_manager = WebSocketManager()
 
 
+def print_startup_banner():
+    """打印带ASCII艺术的启动横幅"""
+    banner = f"""
+\033[96m
+   ███╗   ███╗██████╗ ████████╗██╗      █████╗ ██╗
+   ████╗ ████║██╔══██╗╚══██╔══╝██║     ██╔══██╗██║
+   ██╔████╔██║██████╔╝   ██║   ██║     ███████║██║
+   ██║╚██╔╝██║██╔══██╗   ██║   ██║     ██╔══██║██║
+   ██║ ╚═╝ ██║██████╔╝   ██║   ██║     ██║  ██║██║
+   ╚═╝     ╚═╝╚═════╝    ╚═╝   ╚═╝     ╚═╝  ╚═╝╚═╝
+\033[0m
+\033[93m╔═══════════════════════════════════════════════════════════════╗
+║    🧠 AI-Powered MBTI Chat Room v{settings.APP_VERSION} 🤖                ║
+║    📡 http://localhost:{settings.PORT} | 📖 /docs | 🔍 /health              ║
+╚═══════════════════════════════════════════════════════════════╝\033[0m
+\033[92m🎯 Features: 16 MBTI Characters | WebSocket | AI Responses | WeChat\033[0m
+\033[94m⚡ Stack: FastAPI + PostgreSQL + Redis + Docker\033[0m
+"""
+    print(banner)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
+    # 打印启动横幅
+    print_startup_banner()
+    
     # 启动时初始化
-    logger.info("应用启动中...", app_name=settings.APP_NAME, version=settings.APP_VERSION)
+    logger.info("🚀 应用启动中", app_name=settings.APP_NAME, version=settings.APP_VERSION)
     
     try:
         # 初始化数据库
         await init_db()
-        logger.info("数据库初始化完成")
+        logger.info("✅ 数据库初始化完成")
         
         # 初始化Redis
         await init_redis()
-        logger.info("Redis初始化完成")
+        logger.info("✅ Redis初始化完成")
         
         # 创建静态文件目录
         os.makedirs(settings.STATIC_FILES_PATH, exist_ok=True)
         os.makedirs(settings.UPLOAD_FILES_PATH, exist_ok=True)
         
-        logger.info("应用启动完成")
+        logger.info("🎉 应用启动完成 - Ready to serve!")
         
         yield
         
     except Exception as e:
-        logger.error("应用启动失败", error=str(e))
+        logger.error("💥 应用启动失败", error=str(e))
         raise
     finally:
         # 关闭时清理
-        logger.info("应用关闭中...")
+        logger.info("🛑 应用关闭中")
         
         try:
             await close_redis()
-            logger.info("Redis连接已关闭")
+            logger.info("✅ Redis连接已关闭")
             
             await close_db()
-            logger.info("数据库连接已关闭")
+            logger.info("✅ 数据库连接已关闭")
             
         except Exception as e:
-            logger.error("应用关闭时出错", error=str(e))
+            logger.error("❌ 应用关闭时出错", error=str(e))
         
-        logger.info("应用已关闭")
+        logger.info("👋 应用已关闭 - See you next time!")
 
 
 # 创建FastAPI应用
@@ -277,16 +302,6 @@ async def root():
         "description": "微信小程序AI聊天室后端API",
         "docs_url": "/docs" if settings.DEBUG else None
     }
-
-
-# Prometheus指标端点（如果启用监控）
-if settings.PROMETHEUS_METRICS_PATH:
-    try:
-        from prometheus_client import make_asgi_app
-        metrics_app = make_asgi_app()
-        app.mount(settings.PROMETHEUS_METRICS_PATH, metrics_app)
-    except ImportError:
-        logger.warning("prometheus_client 未安装，跳过指标端点")
 
 
 if __name__ == "__main__":

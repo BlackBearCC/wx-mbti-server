@@ -2,9 +2,11 @@
 应用配置管理
 """
 from functools import lru_cache
-from typing import List, Optional
-from pydantic import BaseSettings, validator
+from typing import List, Optional, Union
+from pydantic_settings import BaseSettings
+from pydantic import validator, Field
 import os
+import json
 
 
 class Settings(BaseSettings):
@@ -76,19 +78,25 @@ class Settings(BaseSettings):
     OPENAI_MODEL: str = "gpt-3.5-turbo"
     
     # CORS配置
-    BACKEND_CORS_ORIGINS: List[str] = []
+    BACKEND_CORS_ORIGINS: Union[str, List[str]] = Field(default_factory=list)
     
     @validator("BACKEND_CORS_ORIGINS", pre=True)
-    def assemble_cors_origins(cls, v: str | List[str]) -> List[str]:
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
-        elif isinstance(v, (list, str)):
+    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
+        if isinstance(v, str):
+            if v.startswith("[") and v.endswith("]"):
+                # JSON格式
+                try:
+                    return json.loads(v)
+                except json.JSONDecodeError:
+                    # 如果JSON解析失败，作为逗号分隔字符串处理
+                    return [i.strip() for i in v.split(",") if i.strip()]
+            else:
+                # 逗号分隔字符串
+                return [i.strip() for i in v.split(",") if i.strip()]
+        elif isinstance(v, list):
             return v
-        raise ValueError(v)
-    
-    # 监控配置
-    PROMETHEUS_METRICS_PATH: str = "/metrics"
-    SENTRY_DSN: Optional[str] = None
+        else:
+            return []
     
     # 文件存储配置
     STATIC_FILES_PATH: str = "/app/static"
