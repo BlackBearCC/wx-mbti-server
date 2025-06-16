@@ -8,6 +8,9 @@ from pydantic import validator, Field
 import os
 import json
 
+# 项目根目录
+# app/config/settings.py -> app/ -> project_root
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 class Settings(BaseSettings):
     """应用配置类"""
@@ -99,8 +102,8 @@ class Settings(BaseSettings):
             return []
     
     # 文件存储配置
-    STATIC_FILES_PATH: str = "/app/static"
-    UPLOAD_FILES_PATH: str = "/app/uploads"
+    STATIC_FILES_PATH: str = os.path.join(PROJECT_ROOT, "static")
+    UPLOAD_FILES_PATH: str = os.path.join(PROJECT_ROOT, "uploads")
     MAX_FILE_SIZE: int = 10 * 1024 * 1024  # 10MB
     
     # 限流配置
@@ -130,4 +133,4 @@ class Settings(BaseSettings):
 @lru_cache()
 def get_settings() -> Settings:
     """获取应用配置实例"""
-    return Settings() 
+    return Settings()

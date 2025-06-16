@@ -14,16 +14,31 @@ import structlog
 import time
 import os
 import logging
+from pathlib import Path
 
 from app.config.settings import get_settings
 from app.config.database import init_db, close_db
 from app.core.redis_client import init_redis, close_redis
 from app.core.websocket_manager import WebSocketManager
-from app.api import auth, users, characters, rooms, skills, payment, websocket
+from app.api import auth, users, characters, rooms, skills, chat, items, feedback, admin, home
 from app.utils.exceptions import AppException
 
 # 获取配置
 settings = get_settings()
+
+# 计算项目根目录
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# 处理静态与上传目录路径，确保存在
+static_dir = Path(settings.STATIC_FILES_PATH)
+if not static_dir.is_absolute():
+    static_dir = BASE_DIR / static_dir
+static_dir.mkdir(parents=True, exist_ok=True)
+
+upload_dir = Path(settings.UPLOAD_FILES_PATH)
+if not upload_dir.is_absolute():
+    upload_dir = BASE_DIR / upload_dir
+upload_dir.mkdir(parents=True, exist_ok=True)
 
 # 配置结构化日志
 structlog.configure(
@@ -266,42 +281,31 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 
 # 静态文件服务
-app.mount("/static", StaticFiles(directory=settings.STATIC_FILES_PATH), name="static")
-app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_FILES_PATH), name="uploads")
+app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+app.mount("/uploads", StaticFiles(directory=str(upload_dir)), name="uploads")
 
 # API路由
-app.include_router(auth.router, prefix="/api/auth", tags=["认证"])
-app.include_router(users.router, prefix="/api/user", tags=["用户"])
-app.include_router(characters.router, prefix="/api/characters", tags=["角色"])
-app.include_router(rooms.router, prefix="/api/rooms", tags=["聊天室"])
-app.include_router(skills.router, prefix="/api/skills", tags=["技能"])
-app.include_router(payment.router, prefix="/api/payment", tags=["支付"])
+app = FastAPI(
+    title="MBTI Character Chat API",
+    description="This is the backend API for the MBTI Character Chat application.",
+    version="0.1.0"
+)
 
-# WebSocket路由
-app.include_router(websocket.router, prefix="/ws", tags=["WebSocket"])
+# Include API routers
+app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
+app.include_router(users.router, prefix="/api/user", tags=["Users"])
+app.include_router(characters.router, prefix="/api/characters", tags=["Characters"])
+app.include_router(rooms.router, prefix="/api/rooms", tags=["Rooms"])
+app.include_router(skills.router, prefix="/api/skills", tags=["Skills"])
+app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
+app.include_router(items.router, prefix="/api/items", tags=["Items"])
+app.include_router(feedback.router, prefix="/api/feedback", tags=["Feedback"])
+app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
+app.include_router(home.router, prefix="", tags=["Home"])
 
-# 健康检查端点
-@app.get("/health", tags=["系统"])
-async def health_check():
-    """健康检查"""
-    return {
-        "status": "healthy",
-        "app_name": settings.APP_NAME,
-        "version": settings.APP_VERSION,
-        "timestamp": time.time()
-    }
-
-
-# 根路径
-@app.get("/", tags=["系统"])
-async def root():
-    """根路径信息"""
-    return {
-        "app_name": settings.APP_NAME,
-        "version": settings.APP_VERSION,
-        "description": "微信小程序AI聊天室后端API",
-        "docs_url": "/docs" if settings.DEBUG else None
-    }
+@app.get("/ping", tags=["Health Check"])
+async def ping():
+    return {"message": "pong"}
 
 
 if __name__ == "__main__":
@@ -312,4 +316,4 @@ if __name__ == "__main__":
         reload=settings.RELOAD,
         log_level=settings.LOG_LEVEL.lower(),
         access_log=settings.DEBUG
-    ) 
+    )

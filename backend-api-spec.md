@@ -652,241 +652,98 @@ Response:
 
 ---
 
-## 🔌 WebSocket 通信协议
+## 🖼️ 首页内容接口
 
-### 连接建立
-```
-连接地址: wss://api.yourhost.com/ws
-认证方式: 连接时传递 token
-ws.connect('wss://api.yourhost.com/ws?token=xxxx')
-```
+### 首页展示需求
+- **卡片 Cards**：展示热门聊天室/功能入口，包含图标、标题、背景渐变等信息，可点击跳转。
+- **轮播 Swipers**：首页顶部横幅，支持跳转指定聊天室或外部链接。
 
-### 消息协议格式
+### 数据结构示例
 ```json
 {
-  "type": "message_type",
-  "data": {},
-  "requestId": "uuid", 
-  "timestamp": 1234567890,
-  "roomId": "string"
+  "card": {
+    "id": "finance_room",          // 唯一标识（通常与 roomId 相同）
+    "title": "金融投资",             // 标题
+    "icon": "💰",                  // Emoji 或图标 URL
+    "background": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)", // 背景
+    "description": "专业金融分析，投资理财建议",   // 描述
+    "roomId": "finance_room",      // 跳转的聊天室 ID（可选）
+    "targetUrl": ""                // 若跳转外链则填写
+  },
+  "swiper": {
+    "id": "banner_finance_001",    // 唯一标识
+    "imageUrl": "/static/banners/finance.png",  // 图片 URL（建议 750×300）
+    "title": "投资热门话题",        // 标题（可选，用于无图标时覆盖文字）
+    "jumpType": "room",            // room|url|none
+    "roomId": "finance_room",      // 当 jumpType=room 时必填
+    "targetUrl": ""                // 当 jumpType=url 时必填
+  }
 }
 ```
 
-### 消息类型定义
+### HTTP API接口
 
-#### 连接管理
-```json
-// 连接成功
+#### 获取首页卡片列表
+```http
+GET /home/cards
+
+Response:
 {
-  "type": "connection_success",
+  "code": 200,
   "data": {
-    "userId": "user123",
-    "serverTime": 1234567890,
-    "onlineRooms": ["finance_room"],  // 用户已在线的房间
-    "activeCharacters": [             // 用户当前活跃的角色
+    "cards": [
       {
-        "characterId": "intj_scientist_001",
-        "name": "艾米·科学家",
-        "level": 15
+        "id": "finance_room",
+        "title": "金融投资",
+        "icon": "💰",
+        "background": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+        "description": "专业金融分析，投资理财建议",
+        "roomId": "finance_room"
+      },
+      {
+        "id": "entertainment_room",
+        "title": "娱乐休闲",
+        "icon": "🎮",
+        "background": "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
+        "description": "轻松聊天，娱乐互动",
+        "roomId": "entertainment_room"
       }
     ]
   }
 }
+```
 
-// 心跳检测
-{
-  "type": "ping",
-  "data": {}
-}
+#### 获取首页轮播图列表
+```http
+GET /home/swipers
 
+Response:
 {
-  "type": "pong", 
+  "code": 200,
   "data": {
-    "serverTime": 1234567890
+    "swipers": [
+      {
+        "id": "banner_finance_001",
+        "imageUrl": "/static/banners/finance.png",
+        "title": "投资热门话题",
+        "jumpType": "room",
+        "roomId": "finance_room"
+      },
+      {
+        "id": "banner_outside_001",
+        "imageUrl": "/static/banners/promo.png",
+        "jumpType": "url",
+        "targetUrl": "https://example.com/activity"
+      }
+    ]
   }
 }
 ```
 
-#### 房间管理
-```json
-// 加入房间
-{
-  "type": "join_room",
-  "data": {
-    "roomId": "finance_room",
-    "userId": "user123",
-    "activeCharacter": "intj_scientist_001"  // 使用的角色
-  }
-}
-
-// 加入房间成功
-{
-  "type": "join_room_success",
-  "data": {
-    "roomId": "finance_room",
-    "roomInfo": {
-      "name": "金融投资",
-      "description": "专业金融分析，投资理财建议",
-      "activeCharacters": [         // 房间内活跃的角色
-        {
-          "characterId": "intj_scientist_001",
-          "dimension": "INTJ",
-          "name": "艾米·科学家",
-          "avatar": "/static/characters/intj_scientist.svg",
-          "level": 15,
-          "skills": ["数据分析 Lv.5", "投资分析 Lv.3"]
-        },
-        {
-          "characterId": "estj_manager_001", 
-          "dimension": "ESTJ",
-          "name": "约翰·经理",
-          "avatar": "/static/characters/estj_manager.svg",
-          "level": 12,
-          "skills": ["团队管理 Lv.4", "投资分析 Lv.2"]
-        }
-      ]
-    },
-    "recentMessages": [...]  // 最近20条消息
-  }
-}
-
-// 切换角色
-{
-  "type": "switch_character",
-  "data": {
-    "roomId": "finance_room",
-    "oldCharacterId": "intj_scientist_001",
-    "newCharacterId": "intj_architect_002"
-  }
-}
-```
-
-#### 消息发送与接收
-```json
-// 用户发送消息
-{
-  "type": "user_message",
-  "data": {
-    "messageId": "msg_123",
-    "roomId": "finance_room", 
-    "content": "今天股市怎么样？",
-    "mentionCharacters": ["intj_scientist_001"], // @的角色
-    "timestamp": 1234567890
-  }
-}
-
-// AI角色回复消息（流式）
-{
-  "type": "ai_message_chunk",
-  "data": {
-    "messageId": "ai_msg_125",
-    "roomId": "finance_room",
-    "character": {
-      "characterId": "intj_scientist_001",
-      "dimension": "INTJ",
-      "name": "艾米·科学家",
-      "avatar": "/static/characters/intj_scientist.svg",
-      "level": 15,
-      "activeSkills": ["数据分析 Lv.5", "投资分析 Lv.3"]
-    },
-    "chunk": "根据我的数据分析(Lv.5)，今天的市场数据显示", 
-    "isComplete": false,
-    "replyToMessageId": "msg_123",
-    "skillsUsed": ["data_analysis", "investment_analysis"], // 使用的技能
-    "topicRelevance": 0.92      // 话题相关度
-  }
-}
-
-// AI消息完成
-{
-  "type": "ai_message_complete", 
-  "data": {
-    "messageId": "ai_msg_125",
-    "roomId": "finance_room",
-    "character": {...},
-    "fullContent": "根据我的数据分析(Lv.5)，今天的市场数据显示大盘呈现震荡上行趋势...",
-    "replyToMessageId": "msg_123",
-    "skillsUsed": ["data_analysis", "investment_analysis"],
-    "experienceGained": {       // 本次回复获得的经验
-      "data_analysis": 8,
-      "investment_analysis": 12
-    },
-    "canLike": true,
-    "timestamp": 1234567890
-  }
-}
-```
-
-#### 技能升级通知
-```json
-// 技能升级通知
-{
-  "type": "skill_levelup",
-  "data": {
-    "characterId": "intj_scientist_001",
-    "skillId": "investment_analysis", 
-    "oldLevel": 2,
-    "newLevel": 3,
-    "newAbilities": [
-      "解锁期货分析能力",
-      "回复质量提升20%"
-    ],
-    "celebrationMessage": "🎉 艾米的投资分析技能升级了！"
-  }
-}
-
-// 新技能解锁通知
-{
-  "type": "skill_unlock",
-  "data": {
-    "characterId": "intj_scientist_001",
-    "skillId": "game_strategy",
-    "skillName": "游戏策略",
-    "unlockCondition": "在娱乐室互动30次",
-    "celebrationMessage": "🎉 艾米学会了新技能：游戏策略！"
-  }
-}
-```
-
-#### 认同系统
-```json
-// 用户认同AI回复
-{
-  "type": "like_message",
-  "data": {
-    "messageId": "ai_msg_125",
-    "roomId": "finance_room", 
-    "characterId": "intj_scientist_001",
-    "userId": "user123"
-  }
-}
-
-// 认同操作确认
-{
-  "type": "like_message_ack",
-  "data": {
-    "messageId": "ai_msg_125",
-    "status": "success|failed|already_liked",
-    "message": "认同成功",
-    "experienceBonus": 5        // 因认同获得的额外经验
-  }
-}
-
-// 认同结果广播
-{
-  "type": "message_like_update",
-  "data": {
-    "messageId": "ai_msg_125",
-    "roomId": "finance_room",
-    "totalLikes": 5,
-    "latestLiker": {
-      "userId": "user123",
-      "nickName": "张三"
-    },
-    "characterId": "intj_scientist_001"
-  }
-}
-```
+> **说明：**
+> 1. 两个接口均为 *无鉴权* 公开接口，首页首次加载即调用；如需灰度、AB 测试，可在返回结构中增加 `experimentId`。
+> 2. 若希望在后台动态控制排序，可在返回数组中按业务排序返回即可。
+> 3. 前端缓存本地 5 分钟，后续自动刷新。
 
 ---
 
