@@ -15,11 +15,11 @@ from .providers.openai import OpenAIProvider
 
 @dataclass
 class CharacterProfile:
-    """Minimal character information required to build prompts."""
+    """Minimal character metadata supplied alongside chat prompts."""
 
     name: str
-    dimension: str
-    persona: Optional[str] = None
+    system_prompt: str = "Stay in character and provide helpful, consistent replies."
+    tag: Optional[str] = None
 
 
 @dataclass
@@ -68,16 +68,8 @@ class AIService:
 
     def _build_prompt(self, character: CharacterProfile, history: Iterable[ChatMessage]) -> List[AIMessage]:
         """Construct provider-agnostic message history."""
-        persona = character.persona or "Stay in character and provide helpful, consistent replies."
-        messages: List[AIMessage] = [
-            AIMessage(
-                role="system",
-                content=(
-                    f"You are {character.name}, MBTI type {character.dimension}. "
-                    f"Keep responses aligned with the role's established tone. {persona}"
-                ),
-            )
-        ]
+        system_prompt = character.system_prompt.strip() or "Stay in character and provide helpful, consistent replies."
+        messages: List[AIMessage] = [AIMessage(role="system", content=system_prompt)]
         for msg in history:
             role = "assistant" if msg.is_ai else "user"
             messages.append(AIMessage(role=role, content=msg.content))

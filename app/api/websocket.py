@@ -22,7 +22,11 @@ async def websocket_endpoint(
         while True:
             payload = await websocket.receive_text()
             history.append(ChatMessage(content=payload, is_ai=False))
-            character = CharacterProfile(name=character_name, dimension="INTJ")
+            character = CharacterProfile(
+                name=character_name,
+                system_prompt="You are a friendly and empathetic AI companion who responds succinctly.",
+                tag=None,
+            )
             result = await ai_service.chat(character=character, history=history, model_alias=model_alias)
             history.append(ChatMessage(content=result.text, is_ai=True))
             await websocket.send_text(result.text)
