@@ -76,9 +76,19 @@ class Settings(BaseSettings):
     WECHAT_PAY_KEY_PATH: Optional[str] = None
     
     # AI服务配置
+    AI_DEFAULT_PROVIDER: str = "doubao"
+    AI_FALLBACK_PROVIDER: Optional[str] = None
+    AI_STREAM_ENABLED: bool = True
+    AI_MAX_OUTPUT_TOKENS: int = 1024
+    AI_PROVIDER_OVERRIDES: Optional[str] = None  # JSON字符串，用于配置多供应商
+    AI_MODEL_ALIASES: Optional[str] = None  # JSON字符串，定义友好名称与模型映射
+    AI_DEFAULT_MODEL_ALIAS: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_BASE_URL: str = "https://api.openai.com/v1"
     OPENAI_MODEL: str = "gpt-3.5-turbo"
+    DOUBAO_API_KEY: Optional[str] = None
+    DOUBAO_BASE_URL: str = "https://ark.cn-beijing.volces.com/api/v3"
+    DOUBAO_MODEL: str = "ep-20240901-chatglm-3-6b"
     
     # CORS配置
     BACKEND_CORS_ORIGINS: Union[str, List[str]] = Field(default_factory=list)
