@@ -1,6 +1,7 @@
 """Doubao (Ark/DeepSeek) provider"""
 from __future__ import annotations
 
+import json
 from typing import Any, AsyncIterator, Dict, Optional
 
 import httpx
@@ -68,10 +69,24 @@ class DoubaoProvider(AIProvider):
             async for line in response.aiter_lines():
                 if not line or not line.startswith("data: "):
                     continue
-                data = line.split("data: ", 1)[1]
+                data = line.split("data: ", 1)[1].strip()
+                if not data:
+                    continue
                 if data == "[DONE]":
                     break
-                yield data
+                try:
+                    payload = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+                for choice in payload.get("choices", []):
+                    delta = choice.get("delta") or choice.get("message") or {}
+                    content = delta.get("content")
+                    if isinstance(content, str):
+                        yield content
+                    elif isinstance(content, list):
+                        for segment in content:
+                            if isinstance(segment, dict) and segment.get("type") == "text":
+                                yield segment.get("text", "")
 
     async def aclose(self) -> None:
         if self._client is not None:
