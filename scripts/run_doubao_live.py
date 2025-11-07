@@ -21,8 +21,8 @@ async def main() -> None:
         service = build_ai_service()
         response = await service.chat(
             character=CharacterProfile(
-                name="即时测试",
-                system_prompt="你是一位鼓励用户的中文 AI 助手，回复需积极、真诚。",
+                name="live-check",
+                system_prompt="你是一位鼓励用户的中文 AI 助手，回答要积极、真诚。",
                 tag="INTJ",
             ),
             history=[ChatMessage(content="请用中文写一句积极向上的话。", is_ai=False)],

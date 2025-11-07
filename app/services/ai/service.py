@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, AsyncIterator, Dict, Iterable, List, Optional
 
 from app.config.settings import get_settings
 
@@ -75,7 +75,7 @@ class AIService:
             messages.append(AIMessage(role=role, content=msg.content))
         return messages
 
-    async def chat(
+    def _prepare_request(
         self,
         character: CharacterProfile,
         history: Iterable[ChatMessage],
@@ -87,7 +87,7 @@ class AIService:
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
         metadata: Optional[Dict[str, Any]] = None,
-    ) -> AIChatResponse:
+    ) -> tuple[AIProvider, AIChatRequest]:
         alias_name = model_alias or self.default_model_alias
         alias_spec = self.model_aliases.get(alias_name) if alias_name else None
 
@@ -122,7 +122,62 @@ class AIService:
             temperature=effective_temperature,
             metadata=effective_metadata or None,
         )
+        return provider, request
+
+    async def chat(
+        self,
+        character: CharacterProfile,
+        history: Iterable[ChatMessage],
+        provider_name: Optional[str] = None,
+        model_alias: Optional[str] = None,
+        character_id: Optional[str] = None,
+        room_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> AIChatResponse:
+        provider, request = self._prepare_request(
+            character=character,
+            history=history,
+            provider_name=provider_name,
+            model_alias=model_alias,
+            character_id=character_id,
+            room_id=room_id,
+            user_id=user_id,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            metadata=metadata,
+        )
         return await provider.complete(request)
+
+    async def stream_chat(
+        self,
+        character: CharacterProfile,
+        history: Iterable[ChatMessage],
+        provider_name: Optional[str] = None,
+        model_alias: Optional[str] = None,
+        character_id: Optional[str] = None,
+        room_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> AsyncIterator[str]:
+        provider, request = self._prepare_request(
+            character=character,
+            history=history,
+            provider_name=provider_name,
+            model_alias=model_alias,
+            character_id=character_id,
+            room_id=room_id,
+            user_id=user_id,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            metadata=metadata,
+        )
+        async for chunk in provider.stream(request):
+            yield chunk
 
 
 def _load_json(text: Optional[str]) -> Dict[str, Any]:
