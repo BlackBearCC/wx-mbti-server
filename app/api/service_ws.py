@@ -48,9 +48,11 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
 from app.config.settings import get_settings
 from app.services.ai import AIService, ChatMessage, CharacterProfile, get_ai_service
+import structlog
 
 
 router = APIRouter()
+logger = structlog.get_logger()
 
 # Minimal in-memory room registry for demo purposes
 ROOM_MEMBERS: Dict[str, Set[int]] = {}
@@ -123,21 +125,37 @@ async def external_ws(
     ws_id = id(websocket)
     WS_REGISTRY[ws_id] = websocket
     try:
+        logger.info("ws.connected", ws_id=ws_id)
+    except Exception:
+        pass
+    try:
         while True:
             raw = await websocket.receive_text()
             try:
                 envelope = json.loads(raw)
             except json.JSONDecodeError:
                 await _send_json(websocket, {"event": "error", "detail": "invalid JSON"})
+                try:
+                    logger.warning("ws.invalid_json", ws_id=ws_id)
+                except Exception:
+                    pass
                 continue
 
             op = (envelope.get("op") or "").lower()
             req_id = envelope.get("reqId")
             data = envelope.get("data") or {}
+            try:
+                logger.info("ws.message", ws_id=ws_id, req_id=req_id, op=op)
+            except Exception:
+                pass
 
             # Ping
             if op == "ping":
                 await _send_json(websocket, {"reqId": req_id, "op": op, "event": "pong"})
+                try:
+                    logger.debug("ws.pong", ws_id=ws_id, req_id=req_id)
+                except Exception:
+                    pass
                 continue
 
             # Room ops
@@ -148,6 +166,10 @@ async def external_ws(
                     continue
                 _room_join(ws_id, room_id)
                 await _send_json(websocket, {"reqId": req_id, "op": op, "event": "result", "roomId": room_id})
+                try:
+                    logger.info("ws.room.join", ws_id=ws_id, room_id=room_id)
+                except Exception:
+                    pass
                 continue
             if op == "room.leave":
                 room_id = data.get("roomId") or data.get("room_id")
@@ -156,6 +178,10 @@ async def external_ws(
                     continue
                 _room_leave(ws_id, room_id)
                 await _send_json(websocket, {"reqId": req_id, "op": op, "event": "result", "roomId": room_id})
+                try:
+                    logger.info("ws.room.leave", ws_id=ws_id, room_id=room_id)
+                except Exception:
+                    pass
                 continue
             if op == "room.typing":
                 room_id = data.get("roomId") or data.get("room_id")
@@ -163,6 +189,10 @@ async def external_ws(
                 if room_id:
                     await _room_broadcast(room_id, {"op": op, "event": "update", "roomId": room_id, "userId": user_id}, exclude=ws_id)
                 await _send_json(websocket, {"reqId": req_id, "op": op, "event": "ack", "roomId": room_id})
+                try:
+                    logger.debug("ws.room.typing", ws_id=ws_id, room_id=room_id, user_id=user_id)
+                except Exception:
+                    pass
                 continue
 
             # AI ops
@@ -181,6 +211,10 @@ async def external_ws(
 
             if op == "ai.chat":
                 try:
+                    logger.info("ws.ai.chat.start", ws_id=ws_id, req_id=req_id, model_alias=model_alias)
+                except Exception:
+                    pass
+                try:
                     result = await ai_service.chat(
                         character=profile,
                         history=history,
@@ -194,8 +228,16 @@ async def external_ws(
                     )
                 except Exception as exc:
                     await _send_json(websocket, {"reqId": req_id, "op": op, "event": "error", "detail": f"AI error: {exc}"})
+                    try:
+                        logger.warning("ws.ai.chat.error", ws_id=ws_id, req_id=req_id, detail=str(exc))
+                    except Exception:
+                        pass
                     continue
                 await _send_json(websocket, {"reqId": req_id, "op": op, "event": "result", "text": result.text, "model": result.model, "usage": result.usage})
+                try:
+                    logger.info("ws.ai.chat.result", ws_id=ws_id, req_id=req_id, model=result.model, chars=len(result.text or ""))
+                except Exception:
+                    pass
                 continue
 
             # ai.stream
@@ -203,6 +245,10 @@ async def external_ws(
                 await _send_json(websocket, {"reqId": req_id, "op": op, "event": "error", "detail": "stream disabled"})
                 continue
             await _send_json(websocket, {"reqId": req_id, "op": op, "event": "start"})
+            try:
+                logger.info("ws.ai.stream.start", ws_id=ws_id, req_id=req_id, model_alias=model_alias)
+            except Exception:
+                pass
             full_text_parts: List[str] = []
             model_report: Optional[str] = None
             usage_report: Optional[Dict[str, int]] = None
@@ -226,11 +272,19 @@ async def external_ws(
                 raise
             except Exception as exc:
                 await _send_json(websocket, {"reqId": req_id, "op": op, "event": "error", "detail": f"AI error: {exc}"})
+                try:
+                    logger.warning("ws.ai.stream.error", ws_id=ws_id, req_id=req_id, detail=str(exc))
+                except Exception:
+                    pass
                 continue
             finally:
                 final_text = "".join(full_text_parts)
                 await _send_json(websocket, {"reqId": req_id, "op": op, "event": "final", "text": final_text})
                 await _send_json(websocket, {"reqId": req_id, "op": op, "event": "done", "model": model_report, "usage": usage_report})
+                try:
+                    logger.info("ws.ai.stream.done", ws_id=ws_id, req_id=req_id, chars=len(final_text))
+                except Exception:
+                    pass
 
     except WebSocketDisconnect:
         try:
@@ -249,6 +303,9 @@ async def external_ws(
                 for rid in list(WS_ROOMS[ws_id]):
                     _room_leave(ws_id, rid)
             WS_REGISTRY.pop(ws_id, None)
+            try:
+                logger.info("ws.disconnected", ws_id=ws_id)
+            except Exception:
+                pass
         except Exception:
             pass
-
