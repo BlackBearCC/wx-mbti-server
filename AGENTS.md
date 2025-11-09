@@ -4,16 +4,59 @@
 The FastAPI app lives under `app/`, split into API routers (`app/api`), configuration and DB helpers (`app/config`), domain models (`app/models`), Pydantic schemas (`app/schemas`), and service layers (`app/services`). Reusable utilities sit in `app/utils`. Database migrations are driven by Alembic (`alembic.ini`, `app/models`, `migrations/`). Docker assets live in `docker/`, operational SQL in `scripts/`, and static files in `static/`.
 
 ## Build, Test, and Development Commands
-Use `uvicorn app.main:app --reload` for a lightweight local server once a `.env` file mirrors `env.template`. `docker-compose up --build` spins up the full stack (PostgreSQL, Redis, API). Run `alembic upgrade head` after schema changes. Format code with `black app tests` and keep imports ordered via `isort app tests`. Type-check critical modules using `mypy app` before raising a PR.
+Use `uvicorn app.main:app --reload` for a local server once `.env` mirrors `env.template`. `docker-compose up --build` spins up the full stack. Run `alembic upgrade head` after schema changes. Format with `black app tests` and `isort app tests`. Type-check critical modules using `mypy app` before a PR.
 
 ## Coding Style & Naming Conventions
-Stick to Black¡¯s default 88-character wrapping and four-space indentation. Modules and packages stay snake_case, classes are PascalCase, async functions use descriptive verbs (`sync_messages`, `issue_token`). Pydantic schema names should mirror their SQLAlchemy counterparts with `Schema` suffixes (e.g., `UserSchema`). Keep environment variables uppercase with prefixes (`APP_`, `DB_`).
+Black default line length (88) and four-space indentation. Modules/packages are snake_case, classes are PascalCase, async function names are descriptive (e.g., `sync_messages`, `issue_token`). Pydantic schema names mirror SQLAlchemy models with `Schema` suffix (e.g., `UserSchema`). Environment variables are UPPERCASE with prefixes (`APP_`, `DB_`).
 
 ## Testing Guidelines
-Pytest is configured via `requirements.txt`; target meaningful coverage for `app/services` and `app/api`. Name files `test_<feature>.py` under `tests/`. For async endpoints leverage `pytest-asyncio` fixtures, and mock Redis/Postgres interactions where feasible. Run `pytest --cov=app tests/` before every push; include regression tests when fixing bugs in WebSocket or payment flows.
+Pytest configured via `requirements.txt`. Focus on `app/services` and `app/api`. Name files `test_<feature>.py` under `tests/`. For async endpoints use `pytest-asyncio` and mock Redis/Postgres when possible. Run `pytest --cov=app tests/` before every push; include regression tests for WebSocket or payment flows.
 
 ## Commit & Pull Request Guidelines
-Follow imperative, present-tense commit titles (e.g., `Add room websocket heartbeat`). Reference issue IDs in the body when applicable. Each PR should describe scope, testing done, schema impacts, and rollback considerations; screenshots or curl samples help reviewers validate API deltas. Ensure lint, type checks, and pytest commands succeed locally before requesting review.
+Use imperative, present-tense commit titles (e.g., `Add room websocket heartbeat`). Reference issue IDs when applicable. Each PR describes scope, testing, schema impacts, and rollback considerations; screenshots or curl samples help reviewers validate API changes. Ensure lint, type checks, and tests succeed locally before review.
 
 ## Security & Configuration Tips
-Never commit real credentials¡ªderive from `env.template`. JWT and Redis secrets must be rotated through your secrets manager. When adding new config knobs, document defaults in `README.md` and thread them through `pydantic-settings` so they can be overridden via environment variables or Docker Compose overrides.
+Never commit real credentials; derive from `env.template`. JWT and Redis secrets must be rotated via your secrets manager. When adding new config knobs, document defaults in `README.md` and wire them through `pydantic-settings` so they are overridable via env or Compose overrides.
+
+## External LLM Interface (HTTP/WS Gateway)
+
+- Do not expose `provider` to clients. Clients pass only `modelAlias`; the server maps alias -> provider+model via env config. The old internal endpoint `POST /api/chat/send` has been removed.
+
+- HTTP (non-stream): `POST /service/chat`
+  - Request
+    - `messages`: array of `{role: system|user|assistant, content: string}`
+    - `modelAlias`: string (optional; defaults to `AI_DEFAULT_MODEL_ALIAS` if set)
+    - `temperature`: float (optional)
+    - `maxTokens`: int (optional)
+    - `metadata`: object (optional)
+  - Response
+    - `{ code: 200, data: { text, model, usage, created } }`
+
+- HTTP (stream, SSE): `POST /service/streamchat`
+  - Response media type: `text/event-stream`
+  - Server emits `data: <chunk>` lines and terminates with `data: [DONE]`
+
+- WebSocket Gateway: `/service/ws`
+  - Envelope (client -> server)
+    ```json
+    { "reqId": "r-123", "op": "ai.chat" | "ai.stream" | "ping" | "room.join" | "room.leave" | "room.typing", "data": { ... } }
+    ```
+  - ai.chat data
+    - `messages`, `modelAlias`, optional `temperature`, `maxTokens`, `metadata`, `characterName`, `systemPrompt`, and optional `userId/roomId/characterId`.
+  - ai.chat response
+    - `{ "reqId": "r-123", "op": "ai.chat", "event": "result", "text": "...", "model": "...", "usage": { ... } }`
+  - ai.stream responses
+    - `start` -> many `chunk` -> `final` -> `done` (all frames include `reqId` and `op`)
+  - room ops (minimal demo)
+    - `room.join` / `room.leave` -> `{event: "result"}`
+    - `room.typing` -> broadcast `{op: "room.typing", event: "update", roomId, userId}` to room peers and `ack` to sender
+
+### Alias and Provider Configuration
+- `AI_MODEL_ALIASES` (JSON) defines alias mapping, e.g.
+  ```json
+  { "default": {"provider": "doubao", "model": "ep-20240901-chatglm-3-6b", "max_tokens": 1024, "temperature": 0.7},
+    "gpt4o-mini": {"provider": "openai", "model": "gpt-4o-mini"} }
+  ```
+- `AI_PROVIDER_OVERRIDES` (JSON) can set vendor `api_key`, `base_url`, `timeout`, and nested `aliases`.
+- `AI_DEFAULT_MODEL_ALIAS` selects the default alias when clients omit `modelAlias`.
+- `AI_STREAM_ENABLED` gates streaming endpoints.
