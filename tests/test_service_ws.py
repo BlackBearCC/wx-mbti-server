@@ -24,6 +24,8 @@ from app.main import app  # noqa: E402
 from app.services.ai import get_ai_service  # noqa: E402
 from app.services.ai.providers.base import AIChatResponse  # noqa: E402
 
+TEST_TOKEN = "dev-token"
+
 
 # 额外降噪（冗余兜底）——运行时仍旧忽略已知第三方库告警
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -71,7 +73,7 @@ def _recv(ws) -> dict:
 
 
 def test_ws_ping(client: TestClient):
-    with client.websocket_connect("/service/ws") as ws:
+    with client.websocket_connect(f"/service/ws?token={TEST_TOKEN}") as ws:
         _send(ws, {"reqId": "r1", "op": "ping"})
         msg = _recv(ws)
         assert msg["reqId"] == "r1"
@@ -80,7 +82,7 @@ def test_ws_ping(client: TestClient):
 
 
 def test_ws_ai_chat(client: TestClient):
-    with client.websocket_connect("/service/ws") as ws:
+    with client.websocket_connect(f"/service/ws?token={TEST_TOKEN}") as ws:
         _send(
             ws,
             {
@@ -102,7 +104,7 @@ def test_ws_ai_chat(client: TestClient):
 
 
 def test_ws_ai_stream(client: TestClient):
-    with client.websocket_connect("/service/ws") as ws:
+    with client.websocket_connect(f"/service/ws?token={TEST_TOKEN}") as ws:
         _send(
             ws,
             {
@@ -134,7 +136,7 @@ def test_ws_ai_stream(client: TestClient):
 
 def test_ws_room_typing_broadcast(client: TestClient):
     # Two clients join the same room; one sends typing and the other gets an update
-    with client.websocket_connect("/service/ws") as ws1, client.websocket_connect("/service/ws") as ws2:
+    with client.websocket_connect(f"/service/ws?token={TEST_TOKEN}") as ws1, client.websocket_connect(f"/service/ws?token={TEST_TOKEN}") as ws2:
         _send(ws1, {"reqId": "j1", "op": "room.join", "data": {"roomId": "room-1"}})
         _send(ws2, {"reqId": "j2", "op": "room.join", "data": {"roomId": "room-1"}})
         j1 = _recv(ws1)

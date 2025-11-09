@@ -17,6 +17,8 @@ from app.main import app  # noqa: E402
 from app.services.ai import get_ai_service  # noqa: E402
 from app.services.ai.providers.base import AIChatResponse  # noqa: E402
 
+TEST_TOKEN = "dev-token"
+
 
 class _FakeAIService:
     async def chat(self, **kwargs) -> AIChatResponse:
@@ -49,6 +51,7 @@ def test_http_chat_ok(client: TestClient):
             "modelAlias": "default",
             "messages": [{"role": "user", "content": "hi"}],
         },
+        headers={"Authorization": f"Bearer {TEST_TOKEN}"},
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -65,6 +68,7 @@ def test_http_streamchat_sse(client: TestClient):
             "modelAlias": "default",
             "messages": [{"role": "user", "content": "stream"}],
         },
+        headers={"Authorization": f"Bearer {TEST_TOKEN}"},
     ) as s:
         chunks = []
         for line in s.iter_lines():
@@ -110,4 +114,3 @@ if __name__ == "__main__":
     else:
         print("HTTP 服务测试：验证失败❌ (exit=", code, ")", sep="")
     raise SystemExit(code)
-

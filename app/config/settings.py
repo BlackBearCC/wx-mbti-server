@@ -134,7 +134,12 @@ class Settings(BaseSettings):
     MAX_MESSAGE_LENGTH: int = 1000  # 最大消息长度
     MAX_ROOM_MEMBERS: int = 100  # 房间最大人数
     AI_RESPONSE_TIMEOUT: int = 30  # AI响应超时时间(秒)
-    
+
+    # 简易鉴权配置（以 API Token 形式）。多个 token 用逗号分隔或 JSON 数组。
+    API_TOKENS: Optional[str] = None
+    # 开发模式下若未配置 API_TOKENS，是否允许任意非空 token 通过（便于本地联调）
+    AUTH_ALLOW_ANY_TOKEN_IN_DEBUG: bool = True
+
     class Config:
         env_file = ".env"
         case_sensitive = True

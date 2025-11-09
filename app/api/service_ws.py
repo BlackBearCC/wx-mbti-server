@@ -48,6 +48,7 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
 from app.config.settings import get_settings
 from app.services.ai import AIService, ChatMessage, CharacterProfile, get_ai_service
+from app.core.security import ws_extract_token, ws_validate_token, enforce_rate_limit
 import structlog
 
 
@@ -124,6 +125,10 @@ async def external_ws(
     await websocket.accept()
     ws_id = id(websocket)
     WS_REGISTRY[ws_id] = websocket
+    # auth state per connection
+    token = ws_extract_token(websocket)
+    authed = ws_validate_token(token)
+    subject = token or f"ip:{getattr(websocket.client, 'host', 'unknown')}"
     try:
         logger.info("ws.connected", ws_id=ws_id)
     except Exception:
@@ -149,6 +154,18 @@ async def external_ws(
             except Exception:
                 pass
 
+            # Auth op: {op: "auth", data: {token: "..."}}
+            if op == "auth":
+                t = data.get("token")
+                if ws_validate_token(t):
+                    token = t
+                    authed = True
+                    subject = token or subject
+                    await _send_json(websocket, {"reqId": req_id, "op": op, "event": "result"})
+                else:
+                    await _send_json(websocket, {"reqId": req_id, "op": op, "event": "error", "code": 401, "detail": "未授权"})
+                continue
+
             # Ping
             if op == "ping":
                 await _send_json(websocket, {"reqId": req_id, "op": op, "event": "pong"})
@@ -160,6 +177,9 @@ async def external_ws(
 
             # Room ops
             if op == "room.join":
+                if not authed:
+                    await _send_json(websocket, {"reqId": req_id, "op": op, "event": "error", "code": 401, "detail": "未授权"})
+                    continue
                 room_id = data.get("roomId") or data.get("room_id")
                 if not room_id:
                     await _send_json(websocket, {"reqId": req_id, "op": op, "event": "error", "detail": "roomId required"})
@@ -172,6 +192,9 @@ async def external_ws(
                     pass
                 continue
             if op == "room.leave":
+                if not authed:
+                    await _send_json(websocket, {"reqId": req_id, "op": op, "event": "error", "code": 401, "detail": "未授权"})
+                    continue
                 room_id = data.get("roomId") or data.get("room_id")
                 if not room_id:
                     await _send_json(websocket, {"reqId": req_id, "op": op, "event": "error", "detail": "roomId required"})
@@ -184,6 +207,9 @@ async def external_ws(
                     pass
                 continue
             if op == "room.typing":
+                if not authed:
+                    await _send_json(websocket, {"reqId": req_id, "op": op, "event": "error", "code": 401, "detail": "未授权"})
+                    continue
                 room_id = data.get("roomId") or data.get("room_id")
                 user_id = data.get("userId") or data.get("user_id")
                 if room_id:
@@ -195,9 +221,12 @@ async def external_ws(
                     pass
                 continue
 
-            # AI ops
+            # AI ops (require auth)
             if op not in {"ai.chat", "ai.stream"}:
                 await _send_json(websocket, {"reqId": req_id, "op": op, "event": "error", "detail": "unsupported op"})
+                continue
+            if not authed:
+                await _send_json(websocket, {"reqId": req_id, "op": op, "event": "error", "code": 401, "detail": "未授权"})
                 continue
 
             profile, history = _build_profile_and_history(data)
@@ -210,6 +239,12 @@ async def external_ws(
             user_id = data.get("userId") or data.get("user_id")
 
             if op == "ai.chat":
+                # Rate limit per subject
+                try:
+                    await enforce_rate_limit(subject, scope="service:ws:ai.chat")
+                except Exception as rle:
+                    await _send_json(websocket, {"reqId": req_id, "op": op, "event": "error", "code": 429, "detail": str(rle)})
+                    continue
                 try:
                     logger.info("ws.ai.chat.start", ws_id=ws_id, req_id=req_id, model_alias=model_alias)
                 except Exception:
@@ -243,6 +278,12 @@ async def external_ws(
             # ai.stream
             if not settings.AI_STREAM_ENABLED:
                 await _send_json(websocket, {"reqId": req_id, "op": op, "event": "error", "detail": "stream disabled"})
+                continue
+            # Rate limit per subject
+            try:
+                await enforce_rate_limit(subject, scope="service:ws:ai.stream")
+            except Exception as rle:
+                await _send_json(websocket, {"reqId": req_id, "op": op, "event": "error", "code": 429, "detail": str(rle)})
                 continue
             await _send_json(websocket, {"reqId": req_id, "op": op, "event": "start"})
             try:

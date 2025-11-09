@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field, validator
 
 from app.config.settings import get_settings
 from app.services.ai import AIService, ChatMessage, CharacterProfile, get_ai_service
+from app.core.security import require_auth, enforce_rate_limit, AuthContext
 
 
 router = APIRouter()
@@ -109,9 +110,13 @@ def _sse(iterable: AsyncIterator[str]) -> StreamingResponse:
 async def external_chat(
     req: ChatRequest,
     ai_service: AIService = Depends(get_ai_service),
+    auth: AuthContext = Depends(require_auth),
 ):
     """Single-shot completion endpoint for external callers."""
     profile, history = _build_profile_and_history(req)
+
+    # Rate limit per subject (token)
+    await enforce_rate_limit(auth.subject, scope="service:http:chat")
 
     try:
         result = await ai_service.chat(
@@ -139,6 +144,7 @@ async def external_chat(
 async def external_stream_chat(
     req: ChatRequest,
     ai_service: AIService = Depends(get_ai_service),
+    auth: AuthContext = Depends(require_auth),
 ):
     """SSE streaming completion endpoint.
 
@@ -148,6 +154,9 @@ async def external_stream_chat(
     settings = get_settings()
     if not settings.AI_STREAM_ENABLED:
         raise HTTPException(status_code=400, detail="Streaming is disabled")
+
+    # Rate limit per subject (token)
+    await enforce_rate_limit(auth.subject, scope="service:http:stream")
 
     profile, history = _build_profile_and_history(req)
     try:

@@ -60,3 +60,14 @@ Never commit real credentials; derive from `env.template`. JWT and Redis secrets
 - `AI_PROVIDER_OVERRIDES` (JSON) can set vendor `api_key`, `base_url`, `timeout`, and nested `aliases`.
 - `AI_DEFAULT_MODEL_ALIAS` selects the default alias when clients omit `modelAlias`.
 - `AI_STREAM_ENABLED` gates streaming endpoints.
+
+### Auth and Rate Limit
+- HTTP endpoints under `/service/*` require token auth:
+  - Header: `Authorization: Bearer <token>` or `X-API-Key: <token>`
+  - Configure allowed tokens via env `API_TOKENS` (comma-separated or JSON array). For local dev, `dev-token` is accepted if `API_TOKENS` is unset.
+- WebSocket gateway `/service/ws` requires token:
+  - Pass as query `?token=<token>`, or after connect send `{op:"auth", data:{token:"..."}}`.
+  - `ping` is allowed pre-auth; `ai.*`/`room.*` require auth.
+- Rate limiting (fixed window via Redis, with in-process fallback):
+  - Config: `RATE_LIMIT_REQUESTS` per `RATE_LIMIT_WINDOW` seconds.
+  - Applied to: `POST /service/chat`, `POST /service/streamchat`, `ws ai.chat`, `ws ai.stream`.
