@@ -20,7 +20,7 @@ from app.config.settings import get_settings
 from app.config.database import init_db, close_db
 from app.core.redis_client import init_redis, close_redis
 from app.core.websocket_manager import WebSocketManager
-from app.api import auth, users, characters, rooms, skills, chat, items, feedback, admin, home
+from app.api import auth, users, characters, rooms, skills, chat, items, feedback, admin, home, service, service_ws
 from app.utils.exceptions import AppException
 
 # 获取配置
@@ -302,6 +302,8 @@ app.include_router(items.router, prefix="/api/items", tags=["Items"])
 app.include_router(feedback.router, prefix="/api/feedback", tags=["Feedback"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 app.include_router(home.router, prefix="", tags=["Home"])
+app.include_router(service.router, prefix="/service", tags=["Service"])
+app.include_router(service_ws.router, prefix="/service", tags=["Service-WS"])
 
 @app.get("/ping", tags=["Health Check"])
 async def ping():

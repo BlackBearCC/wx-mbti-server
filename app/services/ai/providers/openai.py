@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Any, AsyncIterator, Dict, Optional
+import json
 
 import httpx
 
@@ -65,13 +66,22 @@ class OpenAIProvider(AIProvider):
         async with client.stream("POST", "/chat/completions", json=payload) as response:
             response.raise_for_status()
             async for line in response.aiter_lines():
-                if not line:
+                if not line or not line.startswith("data: "):
                     continue
-                if line.startswith("data: "):
-                    data = line.split("data: ", 1)[1]
-                    if data == "[DONE]":
-                        break
-                    yield data
+                data = line.split("data: ", 1)[1].strip()
+                if not data:
+                    continue
+                if data == "[DONE]":
+                    break
+                try:
+                    payload = json.loads(data)
+                except Exception:
+                    continue
+                for choice in payload.get("choices", []):
+                    delta = choice.get("delta") or {}
+                    content = delta.get("content")
+                    if isinstance(content, str) and content:
+                        yield content
 
     async def aclose(self) -> None:
         if self._client is not None:

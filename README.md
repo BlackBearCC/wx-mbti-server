@@ -143,6 +143,65 @@ docker-compose exec app alembic upgrade head
 - Redis Pub/Sub实现多实例消息广播
 - 心跳检测和自动重连
 
+### LLM 接入（HTTP/WS 网关）
+- 仅使用 `modelAlias` 指定模型，具体厂商与模型由服务端别名映射配置；不再接受 `provider`。
+- 非流式 HTTP：`POST /service/chat`
+  - 请求体示例：
+    ```json
+    {
+      "messages": [
+        {"role": "system", "content": "You are concise and helpful."},
+        {"role": "user", "content": "请用中文写一句积极向上的话。"}
+      ],
+      "modelAlias": "default",
+      "temperature": 0.7,
+      "maxTokens": 300,
+      "metadata": {"traceId": "abc123"}
+    }
+    ```
+  - 响应：`{ code, data: { text, model, usage, created } }`
+- 流式 HTTP（SSE）：`POST /service/streamchat`
+  - 返回 `text/event-stream`：连续 `data: <chunk>` 行，结束 `data: [DONE]`
+- WebSocket 网关：`/service/ws`
+  - 客户端按“封包协议”发送消息（统一 op/reqId/data）：
+    - ai.chat（单次）：
+      ```json
+      {
+        "reqId": "r-123",
+        "op": "ai.chat",
+        "data": {
+          "messages": [
+            {"role":"system","content":"You are concise and helpful."},
+            {"role":"user","content":"请用中文写一句积极向上的话。"}
+          ],
+          "modelAlias": "default",
+          "temperature": 0.7,
+          "maxTokens": 256,
+          "metadata": {"traceId": "abc123"}
+        }
+      }
+      ```
+      服务端返回：`{"reqId":"r-123","op":"ai.chat","event":"result","text":"...","model":"...","usage":{...}}`
+
+    - ai.stream（流式）：
+      客户端：`{"reqId":"r-234","op":"ai.stream","data":{...}}`
+      服务端事件序列：
+        - `start` → 多个 `chunk` → `final` → `done`
+
+    - 其他预留 op：`room.join`/`room.leave`/`room.typing`（最小实现：加入/离开房间的应答；typing 会广播到房间内其他连接）。
+
+注意
+- 旧接口 `POST /api/chat/send` 已移除，请统一用 `/service/chat`。
+- 配置别名通过环境变量：
+  - `AI_MODEL_ALIASES`（示例）：
+    ```json
+    {
+      "default": {"provider": "doubao", "model": "ep-20240901-chatglm-3-6b", "max_tokens": 1024, "temperature": 0.7},
+      "gpt4o-mini": {"provider": "openai", "model": "gpt-4o-mini"}
+    }
+    ```
+  - 可选 `AI_PROVIDER_OVERRIDES` 指定各厂商 `api_key/base_url/aliases/...`。
+
 ### 测试
 ```bash
 # 运行单元测试

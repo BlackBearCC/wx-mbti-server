@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 
 # Placeholder for user authentication dependency
 async def get_current_user_placeholder():
@@ -10,86 +11,8 @@ async def get_current_user_placeholder():
 
 router = APIRouter()
 
-# --- Pydantic Models for Chat --- 
-
-class ChatMessageRequest(BaseModel):
-    room_id: str
-    character_id: str # The character the user is chatting with
-    content: str
-    message_type: str = "text" # e.g., text, image_url, action
-    metadata: Optional[Dict[str, Any]] = None
-
-class ChatMessageResponseData(BaseModel):
-    message_id: str
-    timestamp: datetime
-    sender_id: str # User or Character ID
-    sender_type: str # "user" or "character"
-    content: str
-    message_type: str
-    # Potentially character's response if it's a user message
-    character_response: Optional[str] = None 
-    character_response_message_id: Optional[str] = None
-
-class ChatMessageResponse(BaseModel):
-    code: int = 200
-    data: ChatMessageResponseData
-
 # Mock database for chat messages (very simplified)
 fake_chat_log: Dict[str, List[Dict[str, Any]]] = {}
-
-@router.post("/send", response_model=ChatMessageResponse)
-async def send_chat_message(message_data: ChatMessageRequest, current_user: dict = Depends(get_current_user_placeholder)):
-    """发送聊天消息"""
-    # This is a placeholder. 
-    # A real implementation would involve: 
-    # 1. Storing the user's message.
-    # 2. Triggering a character AI response (potentially asynchronously).
-    # 3. Storing the character's response.
-    # 4. Returning both or just the user's message confirmation.
-    # For now, we'll just mock a simple echo and a canned character response.
-
-    user_id = current_user["userId"]
-    room_id = message_data.room_id
-    timestamp = datetime.utcnow()
-    message_id = f"msg_{timestamp.timestamp()}_{user_id[:5]}"
-
-    # Store user message (mock)
-    if room_id not in fake_chat_log:
-        fake_chat_log[room_id] = []
-    fake_chat_log[room_id].append({
-        "message_id": message_id,
-        "timestamp": timestamp,
-        "sender_id": user_id,
-        "sender_type": "user",
-        "character_id": message_data.character_id,
-        "content": message_data.content,
-        "message_type": message_data.message_type
-    })
-
-    # Mock character response
-    char_response_content = f"Ah, {message_data.content}! That's an interesting point, {current_user['username']}. Let me ponder that."
-    char_message_id = f"msg_{datetime.utcnow().timestamp()}_{message_data.character_id[:5]}"
-    
-    fake_chat_log[room_id].append({
-        "message_id": char_message_id,
-        "timestamp": datetime.utcnow(),
-        "sender_id": message_data.character_id,
-        "sender_type": "character",
-        "character_id": message_data.character_id, # Responding to self in a way
-        "content": char_response_content,
-        "message_type": "text"
-    })
-
-    return ChatMessageResponse(data=ChatMessageResponseData(
-        message_id=message_id,
-        timestamp=timestamp,
-        sender_id=user_id,
-        sender_type="user",
-        content=message_data.content,
-        message_type=message_data.message_type,
-        character_response=char_response_content,
-        character_response_message_id=char_message_id
-    ))
 
 # Placeholder for other chat-related endpoints like /history, /typing_indicator etc.
 # --- Pydantic Models for Chat History ---
