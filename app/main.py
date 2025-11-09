@@ -310,6 +310,12 @@ async def ping():
     return {"message": "pong"}
 
 
+@app.get("/health", tags=["Health Check"])
+async def health():
+    """Container/compose 健康检查端点。"""
+    return {"status": "ok"}
+
+
 if __name__ == "__main__":
     uvicorn.run(
         "app.main:app",
