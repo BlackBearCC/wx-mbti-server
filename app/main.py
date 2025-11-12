@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
@@ -33,11 +34,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 static_dir = Path(settings.STATIC_FILES_PATH)
 if not static_dir.is_absolute():
     static_dir = BASE_DIR / static_dir
+# 本地开发时若 .env 指向容器目录（/app/static）不存在，则回退到项目内 static/
+if not static_dir.exists():
+    static_dir = BASE_DIR / "static"
 static_dir.mkdir(parents=True, exist_ok=True)
 
 upload_dir = Path(settings.UPLOAD_FILES_PATH)
 if not upload_dir.is_absolute():
     upload_dir = BASE_DIR / upload_dir
+if not upload_dir.exists():
+    upload_dir = BASE_DIR / "uploads"
 upload_dir.mkdir(parents=True, exist_ok=True)
 
 # 配置结构化日志
@@ -164,6 +170,11 @@ app.add_middleware(
 # GZIP压缩中间件
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
+# 代理头中间件：尊重 X-Forwarded-Proto / X-Forwarded-For
+# 这样在本地通过反向代理或容器网关访问时，request.url.scheme 会被正确设置为 https
+# （前端需要绝对 HTTPS 链接时很有用）
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
+
 # 可信主机中间件（生产环境）
 if not settings.DEBUG:
     app.add_middleware(
@@ -280,18 +291,12 @@ async def general_exception_handler(request: Request, exc: Exception):
     )
 
 
+"""Mount static/uploads and include routers on the single FastAPI app above."""
 # 静态文件服务
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 app.mount("/uploads", StaticFiles(directory=str(upload_dir)), name="uploads")
 
-# API路由
-app = FastAPI(
-    title="MBTI Character Chat API",
-    description="This is the backend API for the MBTI Character Chat application.",
-    version="0.1.0"
-)
-
-# Include API routers
+# Include API routers on the existing app (with lifespan & middlewares)
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 app.include_router(users.router, prefix="/api/user", tags=["Users"])
 app.include_router(characters.router, prefix="/api/characters", tags=["Characters"])

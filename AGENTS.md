@@ -18,11 +18,12 @@ Use imperative, present-tense commit titles (e.g., `Add room websocket heartbeat
 ## Security & Configuration Tips
 Never commit real credentials; derive from `env.template`. JWT and Redis secrets must be rotated via your secrets manager. When adding new config knobs, document defaults in `README.md` and wire them through `pydantic-settings` so they are overridable via env or Compose overrides.
 
-## External LLM Interface (HTTP/WS Gateway)
+## External LLM Interface (HTTPS/WSS Gateway Only)
 
+- Transport: Only HTTPS/WSS. Always serve and reference assets over `https://` and connect WebSocket via `wss://`.
 - Do not expose `provider` to clients. Clients pass only `modelAlias`; the server maps alias -> provider+model via env config. The old internal endpoint `POST /api/chat/send` has been removed.
 
-- HTTP (non-stream): `POST /service/chat`
+- HTTP (non-stream over HTTPS): `POST /service/chat`
   - Request
     - `messages`: array of `{role: system|user|assistant, content: string}`
     - `modelAlias`: string (optional; defaults to `AI_DEFAULT_MODEL_ALIAS` if set)
@@ -32,11 +33,11 @@ Never commit real credentials; derive from `env.template`. JWT and Redis secrets
   - Response
     - `{ code: 200, data: { text, model, usage, created } }`
 
-- HTTP (stream, SSE): `POST /service/streamchat`
+- HTTP (stream, SSE over HTTPS): `POST /service/streamchat`
   - Response media type: `text/event-stream`
   - Server emits `data: <chunk>` lines and terminates with `data: [DONE]`
 
-- WebSocket Gateway: `/service/ws`
+- WebSocket Gateway (WSS): `/service/ws`
   - Envelope (client -> server)
     ```json
     { "reqId": "r-123", "op": "ai.chat" | "ai.stream" | "ping" | "room.join" | "room.leave" | "room.typing", "data": { ... } }
@@ -50,6 +51,22 @@ Never commit real credentials; derive from `env.template`. JWT and Redis secrets
   - room ops (minimal demo)
     - `room.join` / `room.leave` -> `{event: "result"}`
     - `room.typing` -> broadcast `{op: "room.typing", event: "update", roomId, userId}` to room peers and `ack` to sender
+
+### Local TLS For Development
+
+- Windows (mkcert):
+  - Install: `choco install mkcert` (once), then `mkcert -install`
+  - Generate local certs: `mkcert localhost 127.0.0.1`
+    - Produces files like `localhost+2.pem` and `localhost+2-key.pem`
+  - Start Uvicorn with TLS:
+    - `uvicorn app.main:app --host 0.0.0.0 --port 8000 --ssl-certfile .\localhost+2.pem --ssl-keyfile .\localhost+2-key.pem`
+- Docker Compose:
+  - Place the certs under project `./.cert/` and compose will mount to `/app/certs` by default.
+  - The container entrypoint auto-detects `/app/certs/*-key.pem` and `*.pem` and starts Uvicorn with `--ssl-*`.
+  - Healthcheck uses `curl -kf https://localhost:8000/health`.
+- WeChat DevTools:
+  - Add only HTTPS/WSS domain(s).
+  - For self-signed cert during local dev, enable the option to skip certificate checks if needed (dev only).
 
 ### Alias and Provider Configuration
 - `AI_MODEL_ALIASES` (JSON) defines alias mapping, e.g.

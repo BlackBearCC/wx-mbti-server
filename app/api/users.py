@@ -1,9 +1,10 @@
 """
 用户管理API路由
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header, Request
 from pydantic import BaseModel, Field
 from typing import List, Optional
+from app.utils.url import build_base_url
 import time
 
 router = APIRouter()
@@ -12,7 +13,8 @@ router = APIRouter()
 fake_users_db = {}
 
 # Placeholder for JWT token dependency
-async def get_current_user(token: Optional[str] = Depends(lambda x: x.headers.get("Authorization"))):
+async def get_current_user(authorization: Optional[str] = Header(default=None, alias="Authorization")):
+    token = authorization
     if not token or not token.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Not authenticated")
     # In a real app, decode and validate token, then fetch user
@@ -263,11 +265,12 @@ class UserCharactersResponse(BaseModel):
     data: UserCharactersResponseData
 
 @router.get("/characters", response_model=UserCharactersResponse)
-async def get_user_characters(current_user: dict = Depends(get_current_user)):
+async def get_user_characters(request: Request, current_user: dict = Depends(get_current_user)):
     """获取用户角色库"""
     user_id = current_user["userId"]
 
     # Mock data based on the spec
+    base = build_base_url(request, force_https=True)
     mock_owned_characters = [
         OwnedCharacter(
             characterId="intj_scientist_001",
@@ -276,7 +279,7 @@ async def get_user_characters(current_user: dict = Depends(get_current_user)):
             level=15,
             experience=2580,
             nextLevelExp=3000,
-            avatar="/static/characters/intj_scientist.svg",
+            avatar= base + "/static/ui/icons/icon-wisdom.svg",
             talents=[
                 CharacterTalent(skillId="data_analysis", skillName="数据分析", level=5),
                 CharacterTalent(skillId="logical_reasoning", skillName="逻辑推理", level=4)

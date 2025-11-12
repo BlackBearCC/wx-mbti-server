@@ -32,7 +32,7 @@ def _env(name: str, default: str) -> str:
     return v if v else default
 
 
-BASE_URL = _env("TEST_BASE_URL", "http://localhost:8000")
+BASE_URL = _env("TEST_BASE_URL", "https://localhost:8000")
 WS_URL = os.environ.get("TEST_WS_URL")
 if not WS_URL:
     p = urllib.parse.urlparse(BASE_URL)
@@ -46,11 +46,17 @@ DB_PORT = int(_env("TEST_DB_PORT", "5432"))
 
 
 def _http_get(url: str, timeout: float = 5.0) -> int:
-    # Try urllib only (avoid external deps)
+    # urllib with optional insecure SSL context for self-signed dev certs
     import urllib.request
+    import ssl as _ssl
 
     req = urllib.request.Request(url, method="GET")
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    ctx = None
+    if url.startswith("https://"):
+        ctx = _ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = _ssl.CERT_NONE
+    with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:  # type: ignore[arg-type]
         return resp.getcode()  # type: ignore[no-any-return]
 
 
@@ -75,6 +81,8 @@ def _ws_connect(url: str, timeout: float = 5.0) -> socket.socket:
     raw = socket.create_connection((host, port), timeout=timeout)
     if u.scheme == "wss":
         ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
         raw = ctx.wrap_socket(raw, server_hostname=host)
 
     key = base64.b64encode(os.urandom(16)).decode()
@@ -234,4 +242,3 @@ if __name__ == "__main__":
     else:
         print(f"Docker 服务联通性：验证失败❌ (exit={code})")
     raise SystemExit(code)
-

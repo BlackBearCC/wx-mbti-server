@@ -1,0 +1,16 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FFD400"/>
+      <stop offset="100%" stop-color="#FFBF00"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" rx="28" ry="28" width="112" height="112" fill="#0C0C0E"/>
+  <g transform="translate(24,30)">
+    <path d="M22 54 L10 66 L10 54 C4 54 0 50 0 44 L0 20 C0 9 9 0 20 0 L60 0 C71 0 80 9 80 20 L80 44 C80 55 71 64 60 64 L22 64 Z" fill="url(#gold)"/>
+    <circle cx="26" cy="32" r="4.5" fill="#0C0C0E"/>
+    <circle cx="40" cy="32" r="4.5" fill="#0C0C0E"/>
+    <circle cx="54" cy="32" r="4.5" fill="#0C0C0E"/>
+  </g>
+  <title>MBTI Chat Logo Dark</title>
+</svg>

@@ -38,12 +38,14 @@ RUN mkdir -p static uploads logs \
 # 切换到非root用户
 USER appuser
 
-# 健康检查
+# 健康检查（自签证书，使用 -k 跳过验证）
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -kf https://localhost:8000/health || exit 1
 
 # 暴露端口
 EXPOSE 8000
 
-# 启动命令
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"] 
+# 启动命令（TLS 由 entrypoint 检测证书后启用）
+# 使用 BuildKit 的 --chmod/--chown 避免 Windows 权限导致的 chmod 失败
+COPY --chown=appuser:appuser --chmod=0755 docker/entrypoint.sh /app/entrypoint.sh
+CMD ["/app/entrypoint.sh"]

@@ -1,0 +1,25 @@
+<svg width="1440" height="1024" viewBox="0 0 1440 1024" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FFD400"/>
+      <stop offset="100%" stop-color="#FFBF00"/>
+    </linearGradient>
+    <radialGradient id="glowL" cx="0.3" cy="0.3" r="0.6">
+      <stop offset="0%" stop-color="#FFD400" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#FFD400" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowR" cx="0.7" cy="0.6" r="0.7">
+      <stop offset="0%" stop-color="#FFBF00" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#FFBF00" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1440" height="1024" fill="#0C0C0E"/>
+  <rect width="1440" height="1024" fill="url(#glowL)"/>
+  <rect width="1440" height="1024" fill="url(#glowR)"/>
+  <g stroke="url(#gold)" stroke-width="1.5" opacity="0.25">
+    <circle cx="360" cy="300" r="140" fill="none"/>
+    <circle cx="1080" cy="680" r="160" fill="none"/>
+    <circle cx="720" cy="520" r="220" fill="none"/>
+  </g>
+  <title>Chat Dark Background</title>
+</svg>

@@ -1,0 +1,35 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Setup HTTPS Certs (mkcert/openssl)",
+      "type": "shell",
+      "command": "powershell",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts/setup-dev-https.ps1"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Start Backend (HTTPS)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile", "-ExecutionPolicy", "Bypass",
+        "-File", "scripts/start-dev.ps1",
+        "-Https",
+        "-CertFile", ".cert/dev-cert.pem",
+        "-KeyFile", ".cert/dev-key.pem",
+        "-EnvName", "dify"
+      ],
+      "dependsOn": ["Setup HTTPS Certs (mkcert/openssl)"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Start Backend (HTTP)",
+      "type": "shell",
+      "command": "powershell",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts/start-dev.ps1"],
+      "problemMatcher": []
+    }
+  ]
+}
+

@@ -1,10 +1,40 @@
-<svg width="750" height="300" viewBox="0 0 750 300" xmlns="http://www.w3.org/2000/svg">
+<svg width="1200" height="400" viewBox="0 0 1200 400" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
   <defs>
-    <linearGradient id="gradFinance" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#667eea" />
-      <stop offset="100%" stop-color="#764ba2" />
+    <linearGradient id="yb-gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FFD400"/>
+      <stop offset="100%" stop-color="#FFBF00"/>
     </linearGradient>
+    <radialGradient id="yb-glow" cx="0.7" cy="0.4" r="0.6">
+      <stop offset="0%" stop-color="#FFD400" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#FFD400" stop-opacity="0"/>
+    </radialGradient>
   </defs>
-  <rect width="750" height="300" fill="url(#gradFinance)" />
-  <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="60" fill="#ffffff" opacity="0.9">FINANCE</text>
-</svg> 
+  <rect width="1200" height="400" fill="#0C0C0E"/>
+  <!-- soft glow -->
+  <rect width="1200" height="400" fill="url(#yb-glow)"/>
+  <!-- diagonal gold lines -->
+  <g stroke="url(#yb-gold)" stroke-width="2" opacity="0.35">
+    <line x1="-50" y1="320" x2="300" y2="-50"/>
+    <line x1="50"  y1="420" x2="400" y2="-30"/>
+    <line x1="150" y1="420" x2="500" y2="-30"/>
+    <line x1="250" y1="420" x2="600" y2="-30"/>
+  </g>
+  <!-- coin icon -->
+  <g transform="translate(940,80)">
+    <circle cx="80" cy="80" r="72" fill="url(#yb-gold)"/>
+    <circle cx="80" cy="80" r="58" fill="#0C0C0E" opacity="0.15"/>
+    <rect x="68" y="52" width="24" height="56" rx="6" fill="#0C0C0E" opacity="0.7"/>
+    <circle cx="80" cy="80" r="12" fill="#0C0C0E" opacity="0.9"/>
+  </g>
+  <!-- title text blocks (converted to shapes-like bars for compatibility) -->
+  <g>
+    <rect x="80" y="120" width="360" height="18" rx="9" fill="url(#yb-gold)"/>
+    <rect x="80" y="160" width="520" height="10" rx="5" fill="#FFD400" opacity="0.7"/>
+    <rect x="80" y="186" width="420" height="10" rx="5" fill="#FFD400" opacity="0.5"/>
+  </g>
+  <!-- bottom accent -->
+  <rect x="0" y="360" width="1200" height="2" fill="url(#yb-gold)" opacity="0.8"/>
+  <title>Finance Banner (YB)</title>
+  <!-- Z-era minimal finance banner in yellow/black theme -->
+</svg>
+

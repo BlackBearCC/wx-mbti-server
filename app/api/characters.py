@@ -1,15 +1,17 @@
 """
 角色管理API路由
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header, Request
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict
 import time
+from app.utils.url import build_base_url
 
 router = APIRouter()
 
 # Placeholder for JWT token dependency (can be shared or defined in a common utility)
-async def get_current_user_placeholder(token: Optional[str] = Depends(lambda x: x.headers.get("Authorization"))):
+async def get_current_user_placeholder(authorization: Optional[str] = Header(default=None, alias="Authorization")):
+    token = authorization
     if not token or not token.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Not authenticated")
     # Mock user extraction
@@ -27,7 +29,9 @@ mock_characters_db = {
         "dimension": "INTJ",
         "name": "艾米·科学家",
         "englishName": "Amy Scientist",
-        "avatar": "/static/characters/intj_scientist.svg",
+        # 使用服务端内置 PNG 图标（兼容小程序 http/https 限制）
+        # 切换为 Gen-Z 黄黑主题图标（SVG）
+        "avatar": "/static/ui/icons/icon-wisdom.svg",
         "background": "科学家",
         "backgroundStory": "毕业于斯坦福大学的数据科学博士，专注于复杂系统分析...",
         "rarity": "common",
@@ -250,20 +254,24 @@ fake_users_inventory = {
 }
 
 @router.get("/", response_model=GetShopCharactersResponse) # Added response_model
-async def get_characters(current_user: dict = Depends(get_current_user_placeholder)): # Added current_user dependency
+async def get_characters(request: Request, current_user: dict = Depends(get_current_user_placeholder)): # Added current_user dependency
     """获取角色列表 (角色商店)"""
     # Mock user's owned characters - in a real app, this comes from user data
     user_owned_characters = ["intj_scientist_001"] # Example: user owns this character
 
     shop_characters_list = []
+    base = build_base_url(request, force_https=True)
     for char_id, char_data in mock_characters_db.items():
         if not char_data.get("isEnabled", True): # Skip disabled characters
             continue
 
+        avatar = char_data["avatar"]
+        if avatar.startswith("/"):
+            avatar = base + avatar
         shop_char = ShopCharacter(
             characterId=char_data["characterId"],
             name=char_data["name"],
-            avatar=char_data["avatar"],
+            avatar=avatar,
             dimension=char_data["dimension"],
             rarity=char_data["rarity"],
             unlockType=char_data["unlockType"],
@@ -281,7 +289,7 @@ async def get_characters(current_user: dict = Depends(get_current_user_placehold
         shop_characters_list.append(ShopCharacter(
             characterId="infp_dreamer_002",
             name="露娜·梦想家",
-            avatar="/static/characters/infp_dreamer.svg",
+            avatar= base + "/static/ui/icons/icon-empathy.svg",
             dimension="INFP",
             rarity="rare",
             unlockType="points",
@@ -295,7 +303,7 @@ async def get_characters(current_user: dict = Depends(get_current_user_placehold
         shop_characters_list.append(ShopCharacter(
             characterId="estj_commander_003",
             name="马库斯·指挥官",
-            avatar="/static/characters/estj_commander.svg",
+            avatar= base + "/static/ui/icons/icon-focus.svg",
             dimension="ESTJ",
             rarity="epic",
             unlockType="iap", # In-app purchase

@@ -1,27 +1,26 @@
 """
 聊天室管理API路由
 """
-from fastapi import APIRouter, Depends, HTTPException # Added Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header, Request # Added Depends, HTTPException
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict # Added Dict
 import time # Added time for mock data
+from app.utils.url import build_base_url
 
 router = APIRouter()
 
 # Placeholder for JWT token dependency (copied from other api modules for consistency)
-async def get_current_user_placeholder(token: Optional[str] = Depends(lambda x: x.headers.get("Authorization"))):
-    if not token or not token.startswith("Bearer "):
-        # For listing rooms, we might allow unauthenticated access, so this check could be optional
-        # or handled differently based on whether authentication is strictly required for this endpoint.
-        # For now, let's assume it's not strictly required for GET /rooms, but keep the dependency for potential future use.
-        # If token is present, validate it.
-        try:
-            user_id = token.split("_")[-1]
-            return {"userId": user_id, "userLevel": "normal"}
-        except IndexError:
-            # If token is present but invalid, then it's an issue.
-            raise HTTPException(status_code=401, detail="Invalid token format for mock")
-    return None # No token, or not strictly required for this endpoint
+async def get_current_user_placeholder(authorization: Optional[str] = Header(default=None, alias="Authorization")):
+    token = authorization
+    if not token:
+        return None  # allow unauthenticated access for room browse
+    if not token.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Invalid token format for mock")
+    try:
+        user_id = token.split("_")[-1]
+        return {"userId": user_id, "userLevel": "normal"}
+    except IndexError:
+        raise HTTPException(status_code=401, detail="Invalid token format for mock")
 
 # --- Mock Room Data Store ---
 mock_rooms_db = {
@@ -29,10 +28,10 @@ mock_rooms_db = {
         "roomId": "room_tech_talk_001",
         "name": "科技前沿讨论室",
         "description": "讨论最新的科技趋势、AI进展、未来技术等。",
-        "coverImage": "/static/rooms/tech_cover.jpg",
+        "coverImage": "/static/ui/bg/bg-room.svg",
         "characterId": "intj_scientist_001", # 主持人/核心角色ID
         "characterName": "艾米·科学家",
-        "characterAvatar": "/static/characters/intj_scientist.svg",
+        "characterAvatar": "/static/ui/icons/icon-wisdom.svg",
         "tags": ["科技", "AI", "创新"],
         "memberCount": 125,
         "lastActiveTime": time.time() - (2 * 60 * 60), # 2 hours ago
@@ -44,10 +43,10 @@ mock_rooms_db = {
         "roomId": "room_art_corner_002",
         "name": "文艺创作角落",
         "description": "分享诗歌、绘画、音乐等艺术创作和感悟。",
-        "coverImage": "/static/rooms/art_cover.jpg",
+        "coverImage": "/static/ui/bg/bg-room.svg",
         "characterId": "infp_dreamer_002",
         "characterName": "露娜·梦想家",
-        "characterAvatar": "/static/characters/infp_dreamer.svg",
+        "characterAvatar": "/static/ui/icons/icon-empathy.svg",
         "tags": ["艺术", "创作", "文学"],
         "memberCount": 78,
         "lastActiveTime": time.time() - (5 * 60 * 60), # 5 hours ago
@@ -183,7 +182,7 @@ mock_room_details_db = {
 }
 
 @router.get("/{room_id}", response_model=GetRoomDetailResponse)
-async def get_room_detail(room_id: str, current_user: Optional[dict] = Depends(get_current_user_placeholder)):
+async def get_room_detail(room_id: str, request: Request, current_user: Optional[dict] = Depends(get_current_user_placeholder)):
     """获取聊天室详情"""
     room_detail_data = mock_room_details_db.get(room_id)
     if not room_detail_data:
@@ -214,9 +213,37 @@ async def get_room_detail(room_id: str, current_user: Optional[dict] = Depends(g
     if current_user and current_user.get("userId") == "admin_user_id_placeholder": # Example admin
         user_specific_role = "admin"
     
-    # Ensure all fields are present for the response model
-    # The mock_room_details_db should be structured to directly map to GetRoomDetailResponseData
-    final_response_data = GetRoomDetailResponseData(**room_detail_data, userRole=user_specific_role)
+    # Ensure all fields are present for the response model and absolutize image urls
+    base = build_base_url(request, force_https=True)
+    data = dict(room_detail_data)
+    # cover image absolute
+    cov = data.get("coverImage") or ""
+    if isinstance(cov, str) and cov.startswith("/"):
+        data["coverImage"] = base + cov
+    # character info avatar absolute
+    if isinstance(data.get("characterInfo"), dict):
+        ci = dict(data["characterInfo"])  # copy
+        av = ci.get("avatar") or ""
+        if isinstance(av, str) and av.startswith("/"):
+            ci["avatar"] = base + av
+        data["characterInfo"] = ci
+    # members/messages avatars
+    def _abs_list(lst_key: str, field: str):
+        lst = data.get(lst_key)
+        if isinstance(lst, list):
+            out = []
+            for it in lst:
+                if isinstance(it, dict):
+                    d = dict(it)
+                    v = d.get(field)
+                    if isinstance(v, str) and v.startswith("/"):
+                        d[field] = base + v
+                    out.append(d)
+            data[lst_key] = out
+    _abs_list("members", "avatar")
+    _abs_list("messages", "avatar")
+
+    final_response_data = GetRoomDetailResponseData(**data, userRole=user_specific_role)
 
     return GetRoomDetailResponse(data=final_response_data)
 
