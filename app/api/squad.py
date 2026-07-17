@@ -1,13 +1,13 @@
 """Squad API routes for MBTI personality squad feature."""
 import json
-from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+import structlog
 
 from app.config.database import get_db, AsyncSessionLocal
 from app.core.security import get_current_user_jwt
@@ -16,6 +16,7 @@ from app.services.ai import get_ai_service
 from app.services.squad_service import SquadSpeechService
 from app.utils.url import build_base_url
 
+logger = structlog.get_logger()
 router = APIRouter()
 
 
@@ -314,6 +315,7 @@ async def send_room_message(
         mentioned_character_ids=req.mentionedCharacterIds,
     )
     db.add(user_msg)
+    room.last_active_time = func.now()
     await db.commit()
 
     # Stream speeches
@@ -331,20 +333,26 @@ async def send_room_message(
             # Parse chunk events to accumulate content
             if event.startswith("data: ") and event.endswith("\n\n"):
                 payload = event[6:].strip()
-                if payload == "[DONE]":
-                    yield event
-                    break
                 try:
                     data = json.loads(payload)
-                    if data.get("type") == "chunk":
-                        cid = data["characterId"]
-                        character_speeches.setdefault(cid, [])
-                        character_speeches[cid].append(data["content"])
-                    elif data.get("type") == "end":
-                        cid = data["characterId"]
-                        content = "".join(character_speeches.get(cid, []))
-                        if content:
-                            # Persist character message
+                except json.JSONDecodeError:
+                    yield event
+                    continue
+                evt_type = data.get("type")
+                if evt_type == "done":
+                    yield event
+                    break
+                elif evt_type == "chunk":
+                    cid = data["characterId"]
+                    character_speeches.setdefault(cid, [])
+                    character_speeches[cid].append(data["content"])
+                elif evt_type == "end":
+                    cid = data["characterId"]
+                    content = "".join(character_speeches.get(cid, []))
+                    if content:
+                        # Persist character message — wrap in try/except so a
+                        # DB failure doesn't truncate the SSE stream
+                        try:
                             async with AsyncSessionLocal() as persist_session:
                                 char_msg = UserChatMessage(
                                     room_id=room_id,
@@ -354,8 +362,8 @@ async def send_room_message(
                                 )
                                 persist_session.add(char_msg)
                                 await persist_session.commit()
-                except json.JSONDecodeError:
-                    pass
+                        except Exception as e:
+                            logger.error("persist character speech failed", character_id=cid, error=str(e))
             yield event
 
     return StreamingResponse(

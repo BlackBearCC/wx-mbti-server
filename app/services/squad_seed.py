@@ -1,10 +1,29 @@
 """Seed data for squad characters and topics."""
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, text
+from app.config.database import engine
 from app.models.squad import SquadCharacter, Topic
 import structlog
 
 logger = structlog.get_logger()
+
+
+async def migrate_squad_schema() -> None:
+    """Apply additive schema migrations for squad feature.
+
+    Base.metadata.create_all only creates missing tables — it does NOT add
+    columns to existing tables. The users table already exists in production,
+    so avatar_character_id and mbti_type must be added via ALTER TABLE.
+    IF NOT EXISTS makes this idempotent (PostgreSQL 9.6+).
+    """
+    statements = [
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_character_id VARCHAR NULL",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS mbti_type VARCHAR(4) NULL",
+    ]
+    async with engine.begin() as conn:
+        for stmt in statements:
+            await conn.execute(text(stmt))
+    logger.info("squad schema migration applied")
 
 # 16 characters: 8 dimensions x 2 characters each
 SEED_CHARACTERS = [

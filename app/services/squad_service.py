@@ -107,4 +107,4 @@ class SquadSpeechService:
             # 200ms delay between characters
             await asyncio.sleep(0.2)
 
-        yield "data: [DONE]\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"

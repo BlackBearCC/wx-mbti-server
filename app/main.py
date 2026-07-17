@@ -105,7 +105,8 @@ async def lifespan(app: FastAPI):
 
         # Seed squad data
         from app.config.database import AsyncSessionLocal
-        from app.services.squad_seed import seed_squad_data
+        from app.services.squad_seed import seed_squad_data, migrate_squad_schema
+        await migrate_squad_schema()
         async with AsyncSessionLocal() as session:
             await seed_squad_data(session)
         logger.info("✅ Squad seed 完成")
