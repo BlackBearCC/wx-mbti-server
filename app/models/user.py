@@ -47,7 +47,11 @@ class User(Base):
     create_time = Column(DateTime(timezone=True), server_default=func.now())
     update_time = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     is_deleted = Column(Boolean, default=False, nullable=False)
-    
+
+    # MBTI squad fields
+    avatar_character_id = Column(String, nullable=True)  # Squad character ID
+    mbti_type = Column(String(4), nullable=True)  # 'INTJ' etc
+
     def __repr__(self):
         return f"<User(user_id='{self.user_id}', nick_name='{self.nick_name}')>"
 

@@ -141,6 +141,8 @@ async def get_current_user_jwt(
         "favoriteCharacters": [],
         "createTime": user.create_time.timestamp() if user.create_time else time.time(),
         "lastLoginTime": user.last_login_time.timestamp() if user.last_login_time else time.time(),
+        "avatarCharacterId": user.avatar_character_id or "",
+        "mbtiType": user.mbti_type or "",
     }
 
 

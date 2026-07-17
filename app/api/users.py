@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from app.utils.url import build_base_url
 from app.core.security import get_current_user_jwt
+from app.models.user import User
 import time
 
 router = APIRouter()
@@ -38,6 +39,8 @@ class UserProfileResponseData(BaseModel):
     totalLikes: int
     ownedCharacters: int
     totalSkillLevel: int
+    mbtiType: Optional[str] = None
+    avatarCharacterId: Optional[str] = None
     joinedRooms: List[JoinedRoomInfo]
     favoriteCharacters: List[FavoriteCharacterInfo]
     createTime: float
@@ -267,3 +270,70 @@ async def get_user_characters(request: Request, current_user: dict = Depends(get
     )
 
     return UserCharactersResponse(data=response_data)
+
+
+from sqlalchemy import select as _select
+from app.config.database import get_db as _get_db
+from app.models.squad import SquadCharacter
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
+class SetAvatarRequest(BaseModel):
+    avatarCharacterId: str
+    mbtiType: str
+
+
+class AvatarResponseData(BaseModel):
+    userId: str
+    avatarCharacterId: str
+    mbtiType: str
+
+
+class AvatarResponse(BaseModel):
+    code: int = 200
+    data: AvatarResponseData
+
+
+@router.put("/avatar-character", response_model=AvatarResponse)
+async def set_avatar_character(
+    req: SetAvatarRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(_get_db),
+):
+    """Set user's avatar character and MBTI type."""
+    # Validate character exists
+    char_result = await db.execute(
+        _select(SquadCharacter).where(SquadCharacter.character_id == req.avatarCharacterId)
+    )
+    if char_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="角色不存在")
+
+    # Load user and update
+    user_result = await db.execute(
+        _select(User).where(User.user_id == current_user["userId"])
+    )
+    user = user_result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    user.avatar_character_id = req.avatarCharacterId
+    user.mbti_type = req.mbtiType
+    await db.commit()
+
+    return AvatarResponse(data=AvatarResponseData(
+        userId=user.user_id,
+        avatarCharacterId=user.avatar_character_id,
+        mbtiType=user.mbti_type,
+    ))
+
+
+@router.get("/avatar-character", response_model=AvatarResponse)
+async def get_avatar_character(
+    current_user: dict = Depends(get_current_user),
+):
+    """Get user's avatar character and MBTI type."""
+    return AvatarResponse(data=AvatarResponseData(
+        userId=current_user["userId"],
+        avatarCharacterId=current_user.get("avatarCharacterId", ""),
+        mbtiType=current_user.get("mbtiType", ""),
+    ))

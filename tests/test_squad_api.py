@@ -230,3 +230,37 @@ def test_send_message_streams_character_speeches(client: TestClient):
         assert len(speech_events) >= 2
         # First event should be character_n_1 starting
         assert "char_n_1" in speech_events[0] or "char_j_1" in speech_events[0]
+
+
+def test_set_and_get_avatar_character(client: TestClient):
+    # Set avatar
+    set_resp = client.put(
+        "/api/user/avatar-character",
+        json={"avatarCharacterId": "char_n_1", "mbtiType": "INTJ"},
+        headers={"Authorization": f"Bearer {TEST_TOKEN}"},
+    )
+    assert set_resp.status_code == 200
+    set_body = set_resp.json()
+    assert set_body["code"] == 200
+    assert set_body["data"]["avatarCharacterId"] == "char_n_1"
+    assert set_body["data"]["mbtiType"] == "INTJ"
+
+    # Get avatar
+    get_resp = client.get(
+        "/api/user/avatar-character",
+        headers={"Authorization": f"Bearer {TEST_TOKEN}"},
+    )
+    assert get_resp.status_code == 200
+    get_body = get_resp.json()
+    assert get_body["code"] == 200
+    assert get_body["data"]["avatarCharacterId"] == "char_n_1"
+    assert get_body["data"]["mbtiType"] == "INTJ"
+
+
+def test_set_avatar_validates_character_exists(client: TestClient):
+    resp = client.put(
+        "/api/user/avatar-character",
+        json={"avatarCharacterId": "nonexistent", "mbtiType": "INTJ"},
+        headers={"Authorization": f"Bearer {TEST_TOKEN}"},
+    )
+    assert resp.status_code == 404
