@@ -330,10 +330,17 @@ async def set_avatar_character(
 @router.get("/avatar-character", response_model=AvatarResponse)
 async def get_avatar_character(
     current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(_get_db),
 ):
-    """Get user's avatar character and MBTI type."""
+    """Get user's avatar character and MBTI type (reads latest from DB)."""
+    user_result = await db.execute(
+        _select(User).where(User.user_id == current_user["userId"])
+    )
+    user = user_result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=404, detail="用户不存在")
     return AvatarResponse(data=AvatarResponseData(
-        userId=current_user["userId"],
-        avatarCharacterId=current_user.get("avatarCharacterId", ""),
-        mbtiType=current_user.get("mbtiType", ""),
+        userId=user.user_id,
+        avatarCharacterId=user.avatar_character_id or "",
+        mbtiType=user.mbti_type or "",
     ))
