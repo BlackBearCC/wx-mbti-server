@@ -112,3 +112,51 @@ def test_list_topics(client: TestClient):
         assert "recommendedCharacterIds" in t
         assert isinstance(t["recommendedCharacterIds"], list)
         assert len(t["recommendedCharacterIds"]) >= 3
+
+
+def test_create_and_list_rooms(client: TestClient):
+    # Create a room
+    create_resp = client.post(
+        "/api/squad/rooms",
+        json={
+            "title": "裸辞讨论",
+            "topic": "裸辞去追梦想，值得吗？",
+            "characterIds": ["char_n_1", "char_j_1", "char_f_1"],
+        },
+        headers={"Authorization": f"Bearer {TEST_TOKEN}"},
+    )
+    assert create_resp.status_code == 200
+    create_body = create_resp.json()
+    assert create_body["code"] == 200
+    room = create_body["data"]["room"]
+    assert room["roomId"]
+    assert room["title"] == "裸辞讨论"
+    assert room["topic"] == "裸辞去追梦想，值得吗？"
+    assert room["characterIds"] == ["char_n_1", "char_j_1", "char_f_1"]
+
+    # List rooms
+    list_resp = client.get(
+        "/api/squad/rooms",
+        headers={"Authorization": f"Bearer {TEST_TOKEN}"},
+    )
+    assert list_resp.status_code == 200
+    list_body = list_resp.json()
+    assert list_body["code"] == 200
+    rooms = list_body["data"]["rooms"]
+    assert len(rooms) >= 1
+    assert any(r["roomId"] == room["roomId"] for r in rooms)
+
+
+def test_create_room_validates_character_limit(client: TestClient):
+    """Cannot create room with more than 8 characters."""
+    too_many = [f"char_{d}_1" for d in "EISNTFJP"] + ["char_e_2"]
+    resp = client.post(
+        "/api/squad/rooms",
+        json={
+            "title": "too many",
+            "topic": "test",
+            "characterIds": too_many,
+        },
+        headers={"Authorization": f"Bearer {TEST_TOKEN}"},
+    )
+    assert resp.status_code == 400
