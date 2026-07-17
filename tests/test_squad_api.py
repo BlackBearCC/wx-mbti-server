@@ -94,3 +94,21 @@ def test_list_characters(client: TestClient):
         assert "avatar" in c
         assert "voiceStyle" in c
         assert "signature" in c
+
+
+def test_list_topics(client: TestClient):
+    resp = client.get(
+        "/api/squad/topics",
+        headers={"Authorization": f"Bearer {TEST_TOKEN}"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["code"] == 200
+    topics = body["data"]["topics"]
+    assert len(topics) == 7
+    for t in topics:
+        assert "topicId" in t
+        assert "title" in t
+        assert "recommendedCharacterIds" in t
+        assert isinstance(t["recommendedCharacterIds"], list)
+        assert len(t["recommendedCharacterIds"]) >= 3

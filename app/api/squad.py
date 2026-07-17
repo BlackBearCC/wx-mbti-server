@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.database import get_db
 from app.core.security import get_current_user_jwt
-from app.models.squad import SquadCharacter
+from app.models.squad import SquadCharacter, Topic
 from app.utils.url import build_base_url
 
 router = APIRouter()
@@ -61,3 +61,41 @@ async def list_characters(
             unlockType=c.unlock_type,
         ))
     return ListCharactersResponse(data=ListCharactersResponseData(characters=items))
+
+
+class TopicItem(BaseModel):
+    topicId: str
+    title: str
+    recommendedCharacterIds: List[str]
+
+
+class ListTopicsResponseData(BaseModel):
+    topics: List[TopicItem]
+
+
+class ListTopicsResponse(BaseModel):
+    code: int = 200
+    data: ListTopicsResponseData
+
+
+@router.get("/topics", response_model=ListTopicsResponse)
+async def list_topics(
+    current_user: dict = Depends(get_current_user_jwt),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all active topics."""
+    result = await db.execute(
+        select(Topic)
+        .where(Topic.is_active == True)
+        .order_by(Topic.create_time)
+    )
+    topics = result.scalars().all()
+    items = [
+        TopicItem(
+            topicId=t.topic_id,
+            title=t.title,
+            recommendedCharacterIds=t.recommended_character_ids,
+        )
+        for t in topics
+    ]
+    return ListTopicsResponse(data=ListTopicsResponseData(topics=items))
