@@ -21,7 +21,7 @@ from app.config.settings import get_settings
 from app.config.database import init_db, close_db
 from app.core.redis_client import init_redis, close_redis
 from app.core.websocket_manager import WebSocketManager
-from app.api import auth, users, characters, rooms, skills, chat, items, feedback, admin, home, service, service_ws
+from app.api import auth, users, characters, rooms, skills, chat, items, feedback, admin, home, service, service_ws, squad
 from app.utils.exceptions import AppException
 
 # 获取配置
@@ -102,7 +102,14 @@ async def lifespan(app: FastAPI):
         # 初始化数据库
         await init_db()
         logger.info("✅ 数据库初始化完成")
-        
+
+        # Seed squad data
+        from app.config.database import AsyncSessionLocal
+        from app.services.squad_seed import seed_squad_data
+        async with AsyncSessionLocal() as session:
+            await seed_squad_data(session)
+        logger.info("✅ Squad seed 完成")
+
         # 初始化Redis
         await init_redis()
         logger.info("✅ Redis初始化完成")
@@ -309,6 +316,7 @@ app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 app.include_router(home.router, prefix="", tags=["Home"])
 app.include_router(service.router, prefix="/service", tags=["Service"])
 app.include_router(service_ws.router, prefix="/service", tags=["Service-WS"])
+app.include_router(squad.router, prefix="/api/squad", tags=["Squad"])
 
 @app.get("/ping", tags=["Health Check"])
 async def ping():
