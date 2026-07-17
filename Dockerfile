@@ -1,16 +1,23 @@
 FROM python:3.11-slim
 
-# 设置工作目录
+# Set workdir
 WORKDIR /app
 
-# 设置环境变量
+# Env (Tsinghua PyPI mirror for faster builds in China)
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONIOENCODING=utf-8 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+    PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn
 
-# 安装系统依赖
+# Switch to Tencent Cloud internal apt mirror (much faster from CVM)
+RUN sed -i 's|http://deb.debian.org|http://mirrors.tencentyun.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null \
+    || sed -i 's|http://deb.debian.org|http://mirrors.tencentyun.com|g' /etc/apt/sources.list 2>/dev/null \
+    || true
+
+# Install system deps
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
