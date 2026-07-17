@@ -160,3 +160,42 @@ def test_create_room_validates_character_limit(client: TestClient):
         headers={"Authorization": f"Bearer {TEST_TOKEN}"},
     )
     assert resp.status_code == 400
+
+
+def test_get_room_detail(client: TestClient):
+    # Create a room first
+    create_resp = client.post(
+        "/api/squad/rooms",
+        json={
+            "title": "test detail",
+            "topic": "test topic",
+            "characterIds": ["char_n_1"],
+        },
+        headers={"Authorization": f"Bearer {TEST_TOKEN}"},
+    )
+    room_id = create_resp.json()["data"]["room"]["roomId"]
+
+    # Get room detail
+    resp = client.get(
+        f"/api/squad/rooms/{room_id}",
+        headers={"Authorization": f"Bearer {TEST_TOKEN}"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["code"] == 200
+    data = body["data"]
+    assert data["room"]["roomId"] == room_id
+    assert data["room"]["topic"] == "test topic"
+    assert isinstance(data["messages"], list)
+    assert len(data["messages"]) == 0  # No messages yet
+    # Characters included
+    assert len(data["characters"]) == 1
+    assert data["characters"][0]["characterId"] == "char_n_1"
+
+
+def test_get_room_detail_404(client: TestClient):
+    resp = client.get(
+        "/api/squad/rooms/nonexistent",
+        headers={"Authorization": f"Bearer {TEST_TOKEN}"},
+    )
+    assert resp.status_code == 404

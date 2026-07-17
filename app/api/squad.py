@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.database import get_db
 from app.core.security import get_current_user_jwt
-from app.models.squad import SquadCharacter, Topic, UserChatRoom
+from app.models.squad import SquadCharacter, Topic, UserChatRoom, UserChatMessage
 from app.utils.url import build_base_url
 
 router = APIRouter()
@@ -183,3 +183,89 @@ async def list_rooms(
     rooms = result.scalars().all()
     items = [_room_to_item(r) for r in rooms]
     return ListRoomsResponse(data=ListRoomsResponseData(rooms=items))
+
+
+class MessageItem(BaseModel):
+    messageId: str
+    senderType: str  # 'user' | 'character'
+    senderId: str
+    content: str
+    mentionedCharacterIds: List[str] = []
+    createTime: float
+
+
+class RoomDetailData(BaseModel):
+    room: RoomItem
+    messages: List[MessageItem]
+    characters: List[CharacterItem]
+
+
+class RoomDetailResponse(BaseModel):
+    code: int = 200
+    data: RoomDetailData
+
+
+def _message_to_item(msg: UserChatMessage) -> MessageItem:
+    return MessageItem(
+        messageId=msg.message_id,
+        senderType=msg.sender_type,
+        senderId=msg.sender_id,
+        content=msg.content,
+        mentionedCharacterIds=msg.mentioned_character_ids or [],
+        createTime=msg.create_time.timestamp() if msg.create_time else 0,
+    )
+
+
+@router.get("/rooms/{room_id}", response_model=RoomDetailResponse)
+async def get_room_detail(
+    room_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user_jwt),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get room detail with messages and characters."""
+    result = await db.execute(
+        select(UserChatRoom).where(UserChatRoom.room_id == room_id)
+    )
+    room = result.scalar_one_or_none()
+    if room is None:
+        raise HTTPException(status_code=404, detail="聊天室不存在")
+    if room.user_id != current_user["userId"]:
+        raise HTTPException(status_code=404, detail="聊天室不存在")
+
+    # Get messages
+    msg_result = await db.execute(
+        select(UserChatMessage)
+        .where(UserChatMessage.room_id == room_id)
+        .order_by(UserChatMessage.create_time)
+    )
+    messages = [_message_to_item(m) for m in msg_result.scalars().all()]
+
+    # Get characters
+    base = build_base_url(request, force_https=True)
+    char_result = await db.execute(
+        select(SquadCharacter).where(SquadCharacter.character_id.in_(room.character_ids))
+    )
+    chars = []
+    for c in char_result.scalars().all():
+        avatar = c.avatar if c.avatar.startswith("http") else base + c.avatar
+        chars.append(CharacterItem(
+            characterId=c.character_id,
+            name=c.name,
+            dimension=c.dimension,
+            persona=c.persona,
+            avatar=avatar,
+            voiceStyle=c.voice_style,
+            signature=c.signature,
+            unlockType=c.unlock_type,
+        ))
+
+    # Preserve order from room.character_ids
+    char_map = {c.characterId: c for c in chars}
+    ordered_chars = [char_map[cid] for cid in room.character_ids if cid in char_map]
+
+    return RoomDetailResponse(data=RoomDetailData(
+        room=_room_to_item(room),
+        messages=messages,
+        characters=ordered_chars,
+    ))
