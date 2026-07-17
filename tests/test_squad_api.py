@@ -195,7 +195,38 @@ def test_get_room_detail(client: TestClient):
 
 def test_get_room_detail_404(client: TestClient):
     resp = client.get(
-        "/api/squad/rooms/nonexistent",
+        f"/api/squad/rooms/nonexistent",
         headers={"Authorization": f"Bearer {TEST_TOKEN}"},
     )
     assert resp.status_code == 404
+
+
+def test_send_message_streams_character_speeches(client: TestClient):
+    # Create a room
+    create_resp = client.post(
+        "/api/squad/rooms",
+        json={
+            "title": "stream test",
+            "topic": "裸辞",
+            "characterIds": ["char_n_1", "char_j_1"],
+        },
+        headers={"Authorization": f"Bearer {TEST_TOKEN}"},
+    )
+    room_id = create_resp.json()["data"]["room"]["roomId"]
+
+    # Send message and stream response
+    with client.stream(
+        "POST",
+        f"/api/squad/rooms/{room_id}/messages",
+        json={"content": "我该裸辞吗？"},
+        headers={"Authorization": f"Bearer {TEST_TOKEN}"},
+    ) as s:
+        events = []
+        for line in s.iter_lines():
+            if line:
+                events.append(line)
+        # Should have at least 2 character speech events (one per character)
+        speech_events = [e for e in events if e.startswith("data: ")]
+        assert len(speech_events) >= 2
+        # First event should be character_n_1 starting
+        assert "char_n_1" in speech_events[0] or "char_j_1" in speech_events[0]

@@ -1,14 +1,19 @@
 """Squad API routes for MBTI personality squad feature."""
-from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+import json
 from datetime import datetime
-from typing import List
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config.database import get_db
+from app.config.database import get_db, AsyncSessionLocal
 from app.core.security import get_current_user_jwt
 from app.models.squad import SquadCharacter, Topic, UserChatRoom, UserChatMessage
+from app.services.ai import get_ai_service
+from app.services.squad_service import SquadSpeechService
 from app.utils.url import build_base_url
 
 router = APIRouter()
@@ -269,3 +274,92 @@ async def get_room_detail(
         messages=messages,
         characters=ordered_chars,
     ))
+
+
+class SendMessageRequest(BaseModel):
+    content: str
+    mentionedCharacterIds: Optional[List[str]] = None
+
+
+@router.post("/rooms/{room_id}/messages")
+async def send_room_message(
+    room_id: str,
+    req: SendMessageRequest,
+    current_user: dict = Depends(get_current_user_jwt),
+    db: AsyncSession = Depends(get_db),
+    ai_service = Depends(get_ai_service),
+):
+    """Send a message and stream character speeches as SSE."""
+    # Load room
+    result = await db.execute(
+        select(UserChatRoom).where(UserChatRoom.room_id == room_id)
+    )
+    room = result.scalar_one_or_none()
+    if room is None or room.user_id != current_user["userId"]:
+        raise HTTPException(status_code=404, detail="聊天室不存在")
+
+    # Load characters in room order
+    char_result = await db.execute(
+        select(SquadCharacter).where(SquadCharacter.character_id.in_(room.character_ids))
+    )
+    char_map = {c.character_id: c for c in char_result.scalars().all()}
+    speakers = [char_map[cid] for cid in room.character_ids if cid in char_map]
+
+    # Persist user message
+    user_msg = UserChatMessage(
+        room_id=room_id,
+        sender_type="user",
+        sender_id=current_user["userId"],
+        content=req.content,
+        mentioned_character_ids=req.mentionedCharacterIds,
+    )
+    db.add(user_msg)
+    await db.commit()
+
+    # Stream speeches
+    speech_service = SquadSpeechService(ai_service)
+
+    async def event_stream():
+        # Collect character speeches for persistence
+        character_speeches: dict = {}  # character_id -> full content
+        async for event in speech_service.stream_speeches(
+            characters=speakers,
+            topic=room.topic,
+            user_content=req.content,
+            mentioned_character_ids=req.mentionedCharacterIds,
+        ):
+            # Parse chunk events to accumulate content
+            if event.startswith("data: ") and event.endswith("\n\n"):
+                payload = event[6:].strip()
+                if payload == "[DONE]":
+                    yield event
+                    break
+                try:
+                    data = json.loads(payload)
+                    if data.get("type") == "chunk":
+                        cid = data["characterId"]
+                        character_speeches.setdefault(cid, [])
+                        character_speeches[cid].append(data["content"])
+                    elif data.get("type") == "end":
+                        cid = data["characterId"]
+                        content = "".join(character_speeches.get(cid, []))
+                        if content:
+                            # Persist character message
+                            async with AsyncSessionLocal() as persist_session:
+                                char_msg = UserChatMessage(
+                                    room_id=room_id,
+                                    sender_type="character",
+                                    sender_id=cid,
+                                    content=content,
+                                )
+                                persist_session.add(char_msg)
+                                await persist_session.commit()
+                except json.JSONDecodeError:
+                    pass
+            yield event
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
