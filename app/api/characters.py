@@ -6,20 +6,9 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict
 import time
 from app.utils.url import build_base_url
+from app.core.security import get_current_user_jwt
 
 router = APIRouter()
-
-# Placeholder for JWT token dependency (can be shared or defined in a common utility)
-async def get_current_user_placeholder(authorization: Optional[str] = Header(default=None, alias="Authorization")):
-    token = authorization
-    if not token or not token.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    # Mock user extraction
-    try:
-        user_id = token.split("_")[-1] # e.g. Bearer mock_jwt_token_for_user_123 -> 123
-        return {"userId": user_id, "userLevel": "normal"} # Return a mock user dict
-    except IndexError:
-        raise HTTPException(status_code=401, detail="Invalid token format for mock")
 
 # --- Mock Character Data Store ---
 # This would typically come from a database
@@ -155,7 +144,7 @@ class GetCharacterDetailResponse(BaseModel):
     data: GetCharacterDetailResponseData
 
 @router.get("/{character_id}", response_model=GetCharacterDetailResponse)
-async def get_character_detail(character_id: str, current_user: dict = Depends(get_current_user_placeholder)):
+async def get_character_detail(character_id: str, current_user: dict = Depends(get_current_user_jwt)):
     """获取角色详情"""
     character_data = mock_characters_db.get(character_id)
     if not character_data:
@@ -254,7 +243,7 @@ fake_users_inventory = {
 }
 
 @router.get("/", response_model=GetShopCharactersResponse) # Added response_model
-async def get_characters(request: Request, current_user: dict = Depends(get_current_user_placeholder)): # Added current_user dependency
+async def get_characters(request: Request, current_user: dict = Depends(get_current_user_jwt)): # Added current_user dependency
     """获取角色列表 (角色商店)"""
     # Mock user's owned characters - in a real app, this comes from user data
     user_owned_characters = ["intj_scientist_001"] # Example: user owns this character
@@ -317,7 +306,7 @@ async def get_characters(request: Request, current_user: dict = Depends(get_curr
 
 
 @router.post("/unlock", response_model=UnlockCharacterResponse)
-async def unlock_character(request: UnlockCharacterRequest, current_user: dict = Depends(get_current_user_placeholder)):
+async def unlock_character(request: UnlockCharacterRequest, current_user: dict = Depends(get_current_user_jwt)):
     """解锁角色"""
     user_id = f"user_{current_user['userId']}" # Construct user ID for mock db
     character_id_to_unlock = request.characterId

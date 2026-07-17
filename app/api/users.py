@@ -5,48 +5,13 @@ from fastapi import APIRouter, Depends, HTTPException, Header, Request
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from app.utils.url import build_base_url
+from app.core.security import get_current_user_jwt
 import time
 
 router = APIRouter()
 
-# Mock database or user service
-fake_users_db = {}
-
-# Placeholder for JWT token dependency
-async def get_current_user(authorization: Optional[str] = Header(default=None, alias="Authorization")):
-    token = authorization
-    if not token or not token.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    # In a real app, decode and validate token, then fetch user
-    # For now, let's assume token is "Bearer mock_jwt_token_for_user_some_id"
-    # and extract user_id from it.
-    try:
-        user_id_from_token = token.split("_")[-1]
-        if user_id_from_token not in fake_users_db:
-             # If user not in our mock_db from a previous login, create a mock one for profile get/put
-            mock_user_for_profile = {
-                "userId": user_id_from_token,
-                "openid": f"mock_openid_for_{user_id_from_token}",
-                "nickName": "Mock User",
-                "avatarUrl": "http://example.com/avatar.png",
-                "gender": 0,
-                "country": "MockCountry",
-                "province": "MockProvince",
-                "city": "MockCity",
-                "userLevel": "normal",
-                "totalMessages": 0,
-                "totalLikes": 0,
-                "ownedCharacters": 0,
-                "totalSkillLevel": 0,
-                "joinedRooms": [],
-                "favoriteCharacters": [],
-                "createTime": time.time(),
-                "lastLoginTime": time.time()
-            }
-            fake_users_db[user_id_from_token] = mock_user_for_profile
-        return fake_users_db[user_id_from_token] # Return the user dict
-    except IndexError:
-        raise HTTPException(status_code=401, detail="Invalid token format")
+# 复用 JWT 认证依赖
+get_current_user = get_current_user_jwt
 
 class JoinedRoomInfo(BaseModel):
     roomId: str
@@ -95,12 +60,6 @@ class UpdateUserProfileResponse(BaseModel):
 @router.get("/profile", response_model=UserProfileResponse)
 async def get_user_profile(current_user: dict = Depends(get_current_user)):
     """获取用户信息"""
-    # current_user is already a dict from our mock get_current_user
-    # In a real app, current_user might be a User model instance
-    # We need to ensure all fields required by UserProfileResponseData are present
-    # or provide defaults if they can be missing from the 'current_user' dict.
-    
-    # Example: ensure joinedRooms and favoriteCharacters are lists if not present
     current_user.setdefault("joinedRooms", [])
     current_user.setdefault("favoriteCharacters", [])
     current_user.setdefault("totalMessages", 0)
@@ -109,35 +68,18 @@ async def get_user_profile(current_user: dict = Depends(get_current_user)):
     current_user.setdefault("totalSkillLevel", 0)
     current_user.setdefault("userLevel", "normal")
     current_user.setdefault("gender", 0)
-
-    # If current_user was from a DB model, you might convert it to Pydantic model here
-    # For now, we assume current_user dict matches UserProfileResponseData structure
-    # after ensuring default for lists.
-    
-    # Add user to fake_users_db if they logged in via wxlogin and it's their first profile access
-    if current_user["userId"] not in fake_users_db:
-        fake_users_db[current_user["userId"]] = current_user
-        
     return UserProfileResponse(data=UserProfileResponseData(**current_user))
 
 @router.put("/profile", response_model=UpdateUserProfileResponse)
 async def update_user_profile(request_data: UpdateUserProfileRequest, current_user: dict = Depends(get_current_user)):
     """更新用户信息"""
-    user_id = current_user["userId"]
-    user_data = fake_users_db.get(user_id)
-
-    if not user_data:
-        raise HTTPException(status_code=404, detail="User not found")
-
+    user_data = dict(current_user)
     update_data = request_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         if value is not None:
             user_data[field] = value
-    
-    user_data["lastLoginTime"] = time.time() # Update last activity time on profile update
-    fake_users_db[user_id] = user_data
 
-    # Ensure all fields for response are present
+    user_data["lastLoginTime"] = time.time()
     user_data.setdefault("joinedRooms", [])
     user_data.setdefault("favoriteCharacters", [])
     user_data.setdefault("totalMessages", 0)
@@ -146,7 +88,6 @@ async def update_user_profile(request_data: UpdateUserProfileRequest, current_us
     user_data.setdefault("totalSkillLevel", 0)
     user_data.setdefault("userLevel", "normal")
     user_data.setdefault("gender", 0)
-
     return UpdateUserProfileResponse(data=UserProfileResponseData(**user_data))
 
 

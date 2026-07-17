@@ -1,43 +1,61 @@
 """
 聊天室管理API路由
 """
-from fastapi import APIRouter, Depends, HTTPException, Header, Request # Added Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header, Request
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict # Added Dict
-import time # Added time for mock data
+from typing import List, Optional, Dict
+import time
 from app.utils.url import build_base_url
+from app.core.security import get_current_user_jwt
 
 router = APIRouter()
 
-# Placeholder for JWT token dependency (copied from other api modules for consistency)
-async def get_current_user_placeholder(authorization: Optional[str] = Header(default=None, alias="Authorization")):
-    token = authorization
-    if not token:
-        return None  # allow unauthenticated access for room browse
-    if not token.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Invalid token format for mock")
-    try:
-        user_id = token.split("_")[-1]
-        return {"userId": user_id, "userLevel": "normal"}
-    except IndexError:
-        raise HTTPException(status_code=401, detail="Invalid token format for mock")
-
 # --- Mock Room Data Store ---
 mock_rooms_db = {
+    "finance_room": {
+        "roomId": "finance_room",
+        "name": "金融投资",
+        "description": "专业金融分析，投资理财建议",
+        "coverImage": "/static/ui/bg/bg-room.svg",
+        "characterId": "intj_scientist_001",
+        "characterName": "艾米·科学家",
+        "characterAvatar": "/static/ui/icons/icon-wisdom.svg",
+        "tags": ["金融", "投资", "理财"],
+        "memberCount": 156,
+        "lastActiveTime": time.time() - (1 * 60 * 60),
+        "isHot": True,
+        "isNew": False,
+        "createTime": time.time() - (10 * 24 * 60 * 60)
+    },
+    "entertainment_room": {
+        "roomId": "entertainment_room",
+        "name": "娱乐休闲",
+        "description": "轻松聊天，娱乐互动",
+        "coverImage": "/static/ui/bg/bg-chat.svg",
+        "characterId": "infp_dreamer_002",
+        "characterName": "露娜·梦想家",
+        "characterAvatar": "/static/ui/icons/icon-joy.svg",
+        "tags": ["娱乐", "聊天", "互动"],
+        "memberCount": 89,
+        "lastActiveTime": time.time() - (3 * 60 * 60),
+        "isHot": False,
+        "isNew": True,
+        "createTime": time.time() - (2 * 24 * 60 * 60)
+    },
     "room_tech_talk_001": {
         "roomId": "room_tech_talk_001",
         "name": "科技前沿讨论室",
         "description": "讨论最新的科技趋势、AI进展、未来技术等。",
         "coverImage": "/static/ui/bg/bg-room.svg",
-        "characterId": "intj_scientist_001", # 主持人/核心角色ID
+        "characterId": "intj_scientist_001",
         "characterName": "艾米·科学家",
         "characterAvatar": "/static/ui/icons/icon-wisdom.svg",
         "tags": ["科技", "AI", "创新"],
         "memberCount": 125,
-        "lastActiveTime": time.time() - (2 * 60 * 60), # 2 hours ago
+        "lastActiveTime": time.time() - (2 * 60 * 60),
         "isHot": True,
         "isNew": False,
-        "createTime": time.time() - (10 * 24 * 60 * 60) # 10 days ago
+        "createTime": time.time() - (10 * 24 * 60 * 60)
     },
     "room_art_corner_002": {
         "roomId": "room_art_corner_002",
@@ -49,10 +67,10 @@ mock_rooms_db = {
         "characterAvatar": "/static/ui/icons/icon-empathy.svg",
         "tags": ["艺术", "创作", "文学"],
         "memberCount": 78,
-        "lastActiveTime": time.time() - (5 * 60 * 60), # 5 hours ago
+        "lastActiveTime": time.time() - (5 * 60 * 60),
         "isHot": False,
-        "isNew": True, # Assuming created recently
-        "createTime": time.time() - (2 * 24 * 60 * 60) # 2 days ago
+        "isNew": True,
+        "createTime": time.time() - (2 * 24 * 60 * 60)
     }
 }
 
@@ -144,6 +162,62 @@ mock_user_room_memberships = {
 
 # Extended mock_rooms_db with more details for get_room_detail
 mock_room_details_db = {
+    "finance_room": {
+        "roomId": "finance_room",
+        "name": "金融投资",
+        "description": "专业金融分析，投资理财建议",
+        "coverImage": "/static/ui/bg/bg-room.svg",
+        "characterId": "intj_scientist_001",
+        "characterName": "艾米·科学家",
+        "characterAvatar": "/static/ui/icons/icon-wisdom.svg",
+        "tags": ["金融", "投资", "理财"],
+        "memberCount": 156,
+        "characterInfo": {
+            "characterId": "intj_scientist_001", "name": "艾米·科学家",
+            "avatar": "/static/ui/icons/icon-wisdom.svg", "dimension": "INTJ", "background": "科学家"
+        },
+        "onlineMemberCount": 42,
+        "members": [
+            {"userId": "ai_finance_001", "username": "艾米·科学家", "avatar": "/static/ui/icons/icon-wisdom.svg", "isOnline": True},
+        ],
+        "messages": [
+            {
+                "messageId": "msg_fin_001", "userId": "intj_scientist_001", "username": "艾米·科学家",
+                "avatar": "/static/ui/icons/icon-wisdom.svg", "characterId": "intj_scientist_001",
+                "characterName": "艾米·科学家",
+                "content": "欢迎来到金融投资聊天室！今天我们来分析最新的市场趋势。", "messageType": "text", "timestamp": time.time() - 600
+            }
+        ],
+        "userRole": "member"
+    },
+    "entertainment_room": {
+        "roomId": "entertainment_room",
+        "name": "娱乐休闲",
+        "description": "轻松聊天，娱乐互动",
+        "coverImage": "/static/ui/bg/bg-chat.svg",
+        "characterId": "infp_dreamer_002",
+        "characterName": "露娜·梦想家",
+        "characterAvatar": "/static/ui/icons/icon-joy.svg",
+        "tags": ["娱乐", "聊天", "互动"],
+        "memberCount": 89,
+        "characterInfo": {
+            "characterId": "infp_dreamer_002", "name": "露娜·梦想家",
+            "avatar": "/static/ui/icons/icon-joy.svg", "dimension": "INFP", "background": "梦想家"
+        },
+        "onlineMemberCount": 25,
+        "members": [
+            {"userId": "ai_ent_002", "username": "露娜·梦想家", "avatar": "/static/ui/icons/icon-joy.svg", "isOnline": True},
+        ],
+        "messages": [
+            {
+                "messageId": "msg_ent_001", "userId": "infp_dreamer_002", "username": "露娜·梦想家",
+                "avatar": "/static/ui/icons/icon-joy.svg", "characterId": "infp_dreamer_002",
+                "characterName": "露娜·梦想家",
+                "content": "欢迎来到娱乐休闲聊天室！放松心情，愉快聊天吧~", "messageType": "text", "timestamp": time.time() - 300
+            }
+        ],
+        "userRole": "member"
+    },
     "room_tech_talk_001": {
         # Basic info from mock_rooms_db
         "roomId": "room_tech_talk_001",
@@ -182,7 +256,7 @@ mock_room_details_db = {
 }
 
 @router.get("/{room_id}", response_model=GetRoomDetailResponse)
-async def get_room_detail(room_id: str, request: Request, current_user: Optional[dict] = Depends(get_current_user_placeholder)):
+async def get_room_detail(room_id: str, request: Request, current_user: Optional[dict] = Depends(get_current_user_jwt)):
     """获取聊天室详情"""
     room_detail_data = mock_room_details_db.get(room_id)
     if not room_detail_data:
@@ -249,7 +323,7 @@ async def get_room_detail(room_id: str, request: Request, current_user: Optional
 
 
 @router.post("/{room_id}/join", response_model=JoinRoomResponse)
-async def join_room(room_id: str, current_user: dict = Depends(get_current_user_placeholder)):
+async def join_room(room_id: str, current_user: dict = Depends(get_current_user_jwt)):
     """加入聊天室"""
     if not current_user or not current_user.get("userId"):
         raise HTTPException(status_code=401, detail="Authentication required to join a room.")

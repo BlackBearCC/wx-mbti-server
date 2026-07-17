@@ -72,7 +72,7 @@ class Order(Base):
     update_time = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
     # 额外信息
-    metadata = Column(JSON, nullable=True)  # 额外元数据
+    extra_metadata = Column("metadata", JSON, nullable=True)  # 额外元数据（DB 列名保持 metadata）
     notes = Column(Text, nullable=True)  # 备注
     
     def __repr__(self):

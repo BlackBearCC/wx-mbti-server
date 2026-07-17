@@ -176,7 +176,7 @@ class SkillExperienceLog(Base):
     topic_relevance = Column(DECIMAL(3, 2), nullable=True)  # 话题相关度 0.00-1.00
     
     # 额外信息
-    metadata = Column(JSON, nullable=True)  # 额外元数据
+    extra_metadata = Column("metadata", JSON, nullable=True)  # 额外元数据（DB 列名保持 metadata）
     
     create_time = Column(DateTime(timezone=True), server_default=func.now())
     

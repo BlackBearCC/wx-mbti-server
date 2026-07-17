@@ -116,7 +116,7 @@ class UserAchievement(Base):
     # 解锁信息
     unlock_time = Column(DateTime(timezone=True), server_default=func.now())
     progress = Column(Integer, default=100, nullable=False)  # 完成进度百分比
-    metadata = Column(JSON, nullable=True)  # 额外元数据
+    extra_metadata = Column("metadata", JSON, nullable=True)  # 额外元数据（DB 列名保持 metadata）
     
     def __repr__(self):
         return f"<UserAchievement(user_id='{self.user_id}', achievement_id='{self.achievement_id}')>" 

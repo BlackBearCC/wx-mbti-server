@@ -9,16 +9,21 @@ from app.config.settings import get_settings
 settings = get_settings()
 
 # 创建异步数据库引擎
-engine = create_async_engine(
-    settings.DATABASE_URL,
+# NullPool 不支持 pool_size/max_overflow 参数，需根据连接池类型条件传递
+_use_null_pool = settings.DEBUG
+engine_kwargs = dict(
     echo=settings.DEBUG,
-    poolclass=NullPool if settings.DEBUG else None,
     pool_pre_ping=True,
-    pool_recycle=300,  # 5分钟回收连接
-    pool_size=10,
-    max_overflow=20,
-    future=True
+    pool_recycle=300,
+    future=True,
 )
+if _use_null_pool:
+    engine_kwargs["poolclass"] = NullPool
+else:
+    engine_kwargs["pool_size"] = 10
+    engine_kwargs["max_overflow"] = 20
+
+engine = create_async_engine(settings.DATABASE_URL, **engine_kwargs)
 
 # 创建异步会话工厂
 AsyncSessionLocal = async_sessionmaker(
