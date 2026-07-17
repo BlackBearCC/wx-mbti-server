@@ -53,7 +53,7 @@ class ChatRequest(BaseModel):
 class ChatResponseData(BaseModel):
     text: str
     model: str
-    usage: Optional[Dict[str, int]] = None
+    usage: Optional[Dict[str, Any]] = None
     created: datetime
 
 

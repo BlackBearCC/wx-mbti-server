@@ -247,6 +247,7 @@ def build_ai_service() -> AIService:
             model=openai_config.get("model", settings.OPENAI_MODEL),
             base_url=openai_config.get("base_url", settings.OPENAI_BASE_URL),
             timeout=openai_config.get("timeout", settings.AI_RESPONSE_TIMEOUT),
+            disable_thinking=bool(openai_config.get("disable_thinking", settings.OPENAI_DISABLE_THINKING)),
         )
 
     default_provider = settings.AI_DEFAULT_PROVIDER or "doubao"

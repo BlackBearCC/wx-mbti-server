@@ -86,6 +86,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_BASE_URL: str = "https://api.openai.com/v1"
     OPENAI_MODEL: str = "gpt-3.5-turbo"
+    OPENAI_DISABLE_THINKING: bool = False  # For reasoning models like MiniMax M3: send thinking={"type":"disabled"}
     DOUBAO_API_KEY: Optional[str] = None
     DOUBAO_BASE_URL: str = "https://ark.cn-beijing.volces.com/api/v3"
     DOUBAO_MODEL: str = "ep-20240901-chatglm-3-6b"

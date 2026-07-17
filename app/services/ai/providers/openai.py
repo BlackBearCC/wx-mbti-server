@@ -14,11 +14,12 @@ class OpenAIProvider(AIProvider):
 
     name = "openai"
 
-    def __init__(self, api_key: str, model: str, base_url: str, timeout: float = 30.0):
+    def __init__(self, api_key: str, model: str, base_url: str, timeout: float = 30.0, disable_thinking: bool = False):
         self.api_key = api_key
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        self.disable_thinking = disable_thinking
         self._client: Optional[httpx.AsyncClient] = None
 
     async def _get_client(self) -> httpx.AsyncClient:
@@ -30,8 +31,7 @@ class OpenAIProvider(AIProvider):
             )
         return self._client
 
-    async def complete(self, request: AIChatRequest) -> AIChatResponse:
-        client = await self._get_client()
+    def _build_payload(self, request: AIChatRequest, stream: bool = False) -> Dict[str, Any]:
         model_name = request.model or self.model
         payload: Dict[str, Any] = {
             "model": model_name,
@@ -44,7 +44,16 @@ class OpenAIProvider(AIProvider):
             payload["max_tokens"] = request.max_tokens
         if request.temperature is not None:
             payload["temperature"] = request.temperature
+        if self.disable_thinking:
+            # MiniMax M3 OpenAI-compatible API: {"type": "disabled"} fully turns off reasoning
+            payload["thinking"] = {"type": "disabled"}
+        if stream:
+            payload["stream"] = True
+        return payload
 
+    async def complete(self, request: AIChatRequest) -> AIChatResponse:
+        client = await self._get_client()
+        payload = self._build_payload(request, stream=False)
         response = await client.post("/chat/completions", json=payload)
         response.raise_for_status()
         data: Dict[str, Any] = response.json()
@@ -54,15 +63,7 @@ class OpenAIProvider(AIProvider):
 
     async def stream(self, request: AIChatRequest) -> AsyncIterator[str]:
         client = await self._get_client()
-        model_name = request.model or self.model
-        payload: Dict[str, Any] = {
-            "model": model_name,
-            "messages": [
-                {"role": message.role, "content": message.content}
-                for message in request.messages
-            ],
-            "stream": True,
-        }
+        payload = self._build_payload(request, stream=True)
         async with client.stream("POST", "/chat/completions", json=payload) as response:
             response.raise_for_status()
             async for line in response.aiter_lines():
