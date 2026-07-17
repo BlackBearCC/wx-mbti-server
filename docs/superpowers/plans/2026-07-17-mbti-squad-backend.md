@@ -4,7 +4,7 @@
 
 **Goal:** 为 MBTI 人格小分队前端提供完整后端 API——角色池、话题库、用户聊天室、流式发言、化身设置。
 
-**Architecture:** 在现有 FastAPI 应用中新增 `squad` 模块（模型 + API + 服务），不污染现有 `characters`/`chat`/`rooms` 代码。新模型继承现有 `Base`，启动时 `Base.metadata.create_all` 自动建表。流式发言复用现有 `AIService.stream_chat`，通过 WebSocket 推送 token。
+**Architecture:** 在现有 FastAPI 应用中新增 `squad` 模块（模型 + API + 服务），不污染现有 `characters`/`chat`/`rooms` 代码。新模型继承现有 `Base`，启动时 `Base.metadata.create_all` 自动建表。流式发言复用现有 `AIService.stream_chat`，通过 SSE（Server-Sent Events）流式推送 token。
 
 **Tech Stack:** FastAPI + SQLAlchemy 2.0 (async) + PostgreSQL + Redis + MiniMax M3 (via OpenAI-compatible provider) + pytest + TestClient
 
@@ -16,7 +16,8 @@
 - JWT 认证依赖 `get_current_user_jwt`（位于 `app/core/security.py`）
 - 数据库建表靠 `Base.metadata.create_all`（项目无 alembic migrations 目录）
 - 测试用 `TestClient` + `dependency_overrides` 替换 AI service
-- 测试 token 用 `dev-token`
+- 测试 token 用 `dev-token`，但 `get_current_user_jwt` 不接受 dev-token（它要求真实 JWT），所以测试 fixture 必须同时 override `get_current_user_jwt` 返回假用户 dict，并懒加载创建一条 User 行（Task 6 的 `set_avatar_character` 会直接查 User 表）
+- 测试假用户 ID 用 `test-squad-user`
 - 代码注释用英文
 - HTTP 响应统一格式 `{"code": 200, "data": {...}}` 或 `{"code": 200, "message": "...", "data": {...}}`
 
@@ -25,7 +26,7 @@
 **新增文件：**
 - `app/models/squad.py` — SquadCharacter / Topic / UserChatRoom / UserChatMessage 模型
 - `app/api/squad.py` — squad 路由（characters / topics / rooms / messages）
-- `app/services/squad_service.py` — 聊天室业务逻辑（流式发言调度 + WebSocket 推送）
+- `app/services/squad_service.py` — 聊天室业务逻辑（流式发言调度 + SSE 推送）
 - `app/services/squad_seed.py` — 16 角色 + 7 话题 seed 数据
 - `tests/test_squad_api.py` — squad API 测试
 
@@ -56,13 +57,20 @@ Create `tests/test_squad_api.py`:
 ```python
 """Tests for squad API endpoints."""
 import pytest
+from fastapi import Depends
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.testclient import TestClient
 
+from app.config.database import get_db
+from app.core.security import get_current_user_jwt
 from app.main import app
+from app.models.user import User
 from app.services.ai import get_ai_service
 from app.services.ai.providers.base import AIChatResponse
 
 TEST_TOKEN = "dev-token"
+FAKE_USER_ID = "test-squad-user"
 
 
 class _FakeAIService:
@@ -74,14 +82,51 @@ class _FakeAIService:
             yield c
 
 
+async def _override_auth(db: AsyncSession = Depends(get_db)) -> dict:
+    """Override get_current_user_jwt: dev-token is not a real JWT, so we
+    bypass decode_access_token and lazily ensure a User row exists for
+    Task 6's set_avatar_character (which queries the User table directly)."""
+    result = await db.execute(select(User).where(User.user_id == FAKE_USER_ID))
+    if result.scalar_one_or_none() is None:
+        db.add(User(
+            user_id=FAKE_USER_ID,
+            openid="test-openid-squad",
+            nick_name="SquadTestUser",
+        ))
+        await db.commit()
+    return {
+        "userId": FAKE_USER_ID,
+        "openid": "test-openid-squad",
+        "nickName": "SquadTestUser",
+        "avatarUrl": "",
+        "gender": 0,
+        "country": "",
+        "province": "",
+        "city": "",
+        "userLevel": "normal",
+        "totalMessages": 0,
+        "totalLikes": 0,
+        "ownedCharacters": 16,
+        "totalSkillLevel": 0,
+        "joinedRooms": [],
+        "favoriteCharacters": [],
+        "createTime": 0.0,
+        "lastLoginTime": 0.0,
+        "avatarCharacterId": "",
+        "mbtiType": "",
+    }
+
+
 @pytest.fixture()
 def client():
-    async def _override():
+    async def _override_ai():
         return _FakeAIService()
-    app.dependency_overrides[get_ai_service] = _override
+    app.dependency_overrides[get_ai_service] = _override_ai
+    app.dependency_overrides[get_current_user_jwt] = _override_auth
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.pop(get_ai_service, None)
+    app.dependency_overrides.pop(get_current_user_jwt, None)
 
 
 def test_list_characters(client: TestClient):
@@ -212,7 +257,7 @@ SEED_CHARACTERS = [
     {"character_id": "char_f_1", "name": "暖·倾听者", "dimension": "F", "persona": "你是一个温暖的共情者，先关注人的感受再关注事。你相信关系比正确更重要。", "avatar": "/static/ui/squad/f1.svg", "voice_style": "温柔共情", "signature": "我能理解你的感受"},
     {"character_id": "char_f_2", "name": "霞·守护者", "dimension": "F", "persona": "你是一个价值观坚定的守护者，重视道德和情感纽带。你会为弱者发声。", "avatar": "/static/ui/squad/f2.svg", "voice_style": "真诚动人", "signature": "这关乎我们在乎的东西"},
     # J - Judging
-    {"character_id": "char_j_1", "name": "建筑师老周", "dimension": "J", "persona": "你是一个计划性强的执行者，喜欢 deadline 和清单。你讨厌拖延，相信决策比选项更重要。", "avatar": "/static/ui/squad/j1.svg", "voice_style": "果断坚决", "signature": "决定了就去做"},
+    {"character_id": "char_j_1", "name": "杰·执行官", "dimension": "J", "persona": "你是一个计划性强的执行者，喜欢 deadline 和清单。你讨厌拖延，相信决策比选项更重要。", "avatar": "/static/ui/squad/j1.svg", "voice_style": "果断坚决", "signature": "决定了就去做"},
     {"character_id": "char_j_2", "name": "凯·管理者", "dimension": "J", "persona": "你是一个有条理的管理者，喜欢把事情分类、排序、闭环。你相信秩序产生效率。", "avatar": "/static/ui/squad/j2.svg", "voice_style": "条理分明", "signature": "先列个清单"},
     # P - Perceiving
     {"character_id": "char_p_1", "name": "风·游侠", "dimension": "P", "persona": "你是一个自由的游侠，讨厌被计划束缚。你相信保持开放才能抓住机遇。", "avatar": "/static/ui/squad/p1.svg", "voice_style": "随性洒脱", "signature": "看情况吧"},
@@ -816,7 +861,7 @@ git commit -m "feat(squad): add GET /api/squad/rooms/{id} with messages and char
 
 **Interfaces:**
 - Produces: `POST /api/squad/rooms/{id}/messages` returning SSE stream of character speeches, `SquadSpeechService` class
-- Consumes: `AIService.stream_chat` from `app.services.ai`, `UserChatRoom`, `UserChatMessage`, `SquadCharacter`, WebSocket manager from `app.core.websocket_manager`
+- Consumes: `AIService.stream_chat` from `app.services.ai`, `UserChatRoom`, `UserChatMessage`, `SquadCharacter`
 
 - [ ] **Step 1: Write the failing test**
 
